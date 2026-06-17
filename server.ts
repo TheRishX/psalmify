@@ -186,15 +186,46 @@ app.use((req, res, next) => {
 
 // Path correction middleware for Vercel Serverless environment
 app.use((req, res, next) => {
-  const originalUrlHeader = req.headers["x-original-url"];
-  const matchedPath = req.headers["x-matched-path"];
+  let apiPath: string | null = null;
   
-  if (originalUrlHeader && typeof originalUrlHeader === "string") {
-    req.url = originalUrlHeader;
-  } else if (matchedPath && typeof matchedPath === "string" && !matchedPath.endsWith("index") && !matchedPath.endsWith("index.ts") && !matchedPath.endsWith("index.js") && matchedPath.startsWith("/api/")) {
-    const queryIndex = req.url.indexOf("?");
-    const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
-    req.url = matchedPath + query;
+  if (req.query && typeof req.query.__vercel_api_path === "string") {
+    apiPath = req.query.__vercel_api_path;
+  } else {
+    // Manual fallback parse of req.url query string
+    const urlParts = req.url.split("?");
+    if (urlParts.length > 1) {
+      const searchParams = new URLSearchParams(urlParts[1]);
+      const paramVal = searchParams.get("__vercel_api_path");
+      if (paramVal) {
+        apiPath = paramVal;
+      }
+    }
+  }
+
+  if (apiPath) {
+    // Clean up query param
+    if (req.query) {
+      delete req.query.__vercel_api_path;
+    }
+    
+    // Reconstruct clean query parameter list
+    const queryParts = Object.entries(req.query || {}).filter(([k]) => k !== "__vercel_api_path");
+    const qParts = queryParts.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+    const qStr = qParts.length > 0 ? "?" + qParts.join("&") : "";
+    
+    req.url = apiPath + qStr;
+  } else {
+    // Traditional fallback headers check
+    const originalUrlHeader = req.headers["x-original-url"];
+    const matchedPath = req.headers["x-matched-path"];
+    
+    if (originalUrlHeader && typeof originalUrlHeader === "string") {
+      req.url = originalUrlHeader;
+    } else if (matchedPath && typeof matchedPath === "string" && !matchedPath.endsWith("index") && !matchedPath.endsWith("index.ts") && !matchedPath.endsWith("index.js") && matchedPath.startsWith("/api/")) {
+      const queryIndex = req.url.indexOf("?");
+      const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
+      req.url = matchedPath + query;
+    }
   }
   next();
 });
