@@ -174,23 +174,20 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json());
 
-  app.use(express.json());
+// ==========================================
+// 1. PUBLIC & ADMIN LYRIC APP DATABASE APIs
+// ==========================================
 
-  // ==========================================
-  // 1. PUBLIC & ADMIN LYRIC APP DATABASE APIs
-  // ==========================================
+// Get all playlists
+app.get("/api/playlists", (req, res) => {
+  res.json(playlists);
+});
 
-  // Get all playlists
-  app.get("/api/playlists", (req, res) => {
-    res.json(playlists);
-  });
-
-  // Create or Update a playlist
-  app.post("/api/playlists", (req, res) => {
+// Create or Update a playlist
+app.post("/api/playlists", (req, res) => {
     const { id, name, description, coverUrl, genre, songIds } = req.body;
     if (!name || !genre) {
        res.status(400).json({ error: "Name and genre are required." });
@@ -766,25 +763,34 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
   // ==========================================
   // 4. VITE DEV AND PRODUCTION STATIC SERVING
   // ==========================================
-  if (process.env.NODE_ENV !== "production") {
-    console.log("Hooking Vite middleware for dev runtime.");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    console.log(`Serving industrial assets from production path: ${distPath}`);
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  async function startServer() {
+    const PORT = 3000;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Hooking Vite middleware for dev runtime.");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      console.log(`Serving industrial assets from production path: ${distPath}`);
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+
+    if (!process.env.VERCEL) {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Smart Lyrics Server running on http://0.0.0.0:${PORT}`);
+      });
+    }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Smart Lyrics Server running on http://0.0.0.0:${PORT}`);
-  });
-}
+  if (!process.env.VERCEL) {
+    startServer();
+  }
 
-startServer();
+  export { app };
+  export default app;
