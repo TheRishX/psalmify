@@ -141,7 +141,8 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
   // Trigger real WordPress OAuth popups
   const handleWordPressOAuth = async () => {
     try {
-      const res = await fetch('/api/wordpress/oauth/url');
+      const finalRedirectUri = window.location.origin + '/auth/callback';
+      const res = await fetch(`/api/wordpress/oauth/url?redirect_uri=${encodeURIComponent(finalRedirectUri)}`);
       if (!res.ok) {
         const errData = await res.json();
         alert(errData.error || 'To connect your real blog, please configure WORDPRESS_CLIENT_ID and WORDPRESS_CLIENT_SECRET variables in your workspace settings.');
@@ -407,7 +408,7 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
 
       if (res.status === 201) {
         setSyncStatus('success');
-        setSyncMessage(isRealWP ? 'Published successfully to upperroomx.wordpress.com!' : 'Payload Successfully published! Synced to remote WordPress database.');
+        setSyncMessage(isRealWP ? `Published successfully to ${wpBlogUrl || 'psalmify.wordpress.com'}!` : 'Payload Successfully published! Synced to remote WordPress database.');
         setSyncedWPLink(data.link || '#');
         
         // Also save changes to local in-memory database representation to be nice & sync!
@@ -748,6 +749,33 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
                             <span className="text-[9px] text-white/30 block uppercase font-bold">Bridge Settings</span>
                             <div>• Target: <span className="text-white">psalmify.wordpress.com</span></div>
                             <div>• Auth Protocol: <span className="text-white">OAuth 2.0 Web Authorization flow</span></div>
+                          </div>
+
+                          <div className="p-3 bg-[#0c0a09] border border-rose-500/15 rounded-xl space-y-2 text-[11px] font-mono text-white/70">
+                            <div className="flex items-center justify-between text-rose-400 font-bold text-[10px] uppercase">
+                              <span>⚠️ ACTION REQUIRED IN WP PORTAL</span>
+                            </div>
+                            <p className="text-[10px] text-white/50 leading-relaxed">
+                              Wordpress requires the exact redirect callback to be configured. Go to your developer portal on <a href="https://developer.wordpress.com/" target="_blank" rel="noreferrer" className="underline text-rose-400 hover:text-rose-300 font-bold">developer.wordpress.com</a>, open your application, and ensure your <strong>Redirect URLs</strong> matches or contains:
+                            </p>
+                            <div className="flex items-center gap-1.5 bg-black rounded p-1.5 border border-white/5">
+                              <input 
+                                type="text" 
+                                readOnly 
+                                value={`${window.location.origin}/auth/callback`}
+                                className="flex-1 bg-transparent border-none text-[10px] text-rose-300 font-mono outline-none select-all focus:ring-0"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/auth/callback`);
+                                  alert("Redirect URL copied successfully!");
+                                }}
+                                className="px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[9px] rounded border border-rose-500/20 transition active:scale-95 cursor-pointer font-bold"
+                              >
+                                Copy
+                              </button>
+                            </div>
                           </div>
 
                           <button

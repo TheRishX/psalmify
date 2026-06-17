@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { DEFAULT_SONGS, DEFAULT_PLAYLISTS } from "./src/data/defaultData.js";
 import { parseRawLyrics } from "./src/utils/lyricParser.js";
@@ -9,13 +10,147 @@ import { GoogleGenAI } from "@google/genai";
 // Initialize environment variables
 dotenv.config();
 
-// Initialize internal storage with preloaded data
-// Auto-parse default lyrics so they are structured
-let songs = DEFAULT_SONGS.map(s => ({
-  ...s,
-  formattedLyrics: parseRawLyrics(s.rawLyrics)
-}));
-let playlists = [...DEFAULT_PLAYLISTS];
+// Initialize internal storage with preloaded data + local disk persistence
+const PERSISTED_SONGS_PATH = path.join(process.cwd(), "persisted_songs.json");
+const PERSISTED_PLAYLISTS_PATH = path.join(process.cwd(), "persisted_playlists.json");
+
+let songs = [];
+let playlists = [];
+
+try {
+  if (fs.existsSync(PERSISTED_SONGS_PATH)) {
+    songs = JSON.parse(fs.readFileSync(PERSISTED_SONGS_PATH, "utf-8"));
+  } else {
+    songs = DEFAULT_SONGS.map(s => ({
+      ...s,
+      formattedLyrics: parseRawLyrics(s.rawLyrics)
+    }));
+  }
+} catch (e) {
+  console.warn("Failed to read persisted songs:", e);
+  songs = DEFAULT_SONGS.map(s => ({
+    ...s,
+    formattedLyrics: parseRawLyrics(s.rawLyrics)
+  }));
+}
+
+try {
+  if (fs.existsSync(PERSISTED_PLAYLISTS_PATH)) {
+    playlists = JSON.parse(fs.readFileSync(PERSISTED_PLAYLISTS_PATH, "utf-8"));
+  } else {
+    playlists = [...DEFAULT_PLAYLISTS];
+  }
+} catch (e) {
+  console.warn("Failed to read persisted playlists:", e);
+  playlists = [...DEFAULT_PLAYLISTS];
+}
+
+function saveSongsToDisk() {
+  try {
+    fs.writeFileSync(PERSISTED_SONGS_PATH, JSON.stringify(songs, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Failed to write persisted songs:", e);
+  }
+}
+
+function savePlaylistsToDisk() {
+  try {
+    fs.writeFileSync(PERSISTED_PLAYLISTS_PATH, JSON.stringify(playlists, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Failed to write persisted playlists:", e);
+  }
+}
+
+// Helper to reverse format HTML sent to WordPress back to structured raw lyrics
+function convertHtmlToRawLyrics(html: string): string {
+  if (!html) return "";
+  
+  const sectionRegex = /<section[^>]*class="[^"]*lyric-section[^"]*"[^>]*>([\s\S]*?)<\/section>/gi;
+  let match;
+  const parts: string[] = [];
+  
+  while ((match = sectionRegex.exec(html)) !== null) {
+    const sectionContent = match[1];
+    
+    // Extract label
+    const labelMatch = /<div[^>]*style="[^"]*"[^>]*>([\s\S]*?)<\/div>/i.exec(sectionContent) || /<div[^>]*class="[^"]*lyric-label[^"]*"[^>]*>([\s\S]*?)<\/div>/i.exec(sectionContent);
+    const label = labelMatch ? labelMatch[1].replace(/<[^>]+>/g, "").trim() : "";
+    
+    // Extract lines
+    const linesContentMatch = /<div[^>]*class="[^"]*lyric-lines[^"]*"[^>]*>([\s\S]*?)<\/div>/i.exec(sectionContent) || /<div[^>]*style="[^"]*"[^>]*>([\s\S]*?)<\/div>/i.exec(sectionContent);
+    const linesContent = linesContentMatch ? linesContentMatch[1] : sectionContent;
+    
+    const lineRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    let lineMatch;
+    const lines: string[] = [];
+    while ((lineMatch = lineRegex.exec(linesContent)) !== null) {
+      const lineText = lineMatch[1]
+        .replace(/<[^>]+>/g, "")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#8217;/g, "'")
+        .replace(/&#8211;/g, "-")
+        .trim();
+      if (lineText) lines.push(lineText);
+    }
+    
+    if (lines.length > 0) {
+      let sectionText = "";
+      if (label) {
+        sectionText += `[${label}]\n`;
+      }
+      sectionText += lines.join("\n");
+      parts.push(sectionText);
+    }
+  }
+  
+  if (parts.length > 0) {
+    return parts.join("\n\n");
+  }
+  
+  // Fallback: strip standard format
+  let clean = html
+    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
+    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8211;/g, "-")
+    .trim();
+    
+  clean = clean.replace(/\n\s*\n\s*\n+/g, "\n\n");
+  return clean;
+}
+
+// Dynamically fetch WordPress.com blog posts
+async function fetchWordPressPosts(siteUrl: string = "psalmify.wordpress.com"): Promise<any[]> {
+  try {
+    const url = `https://public-api.wordpress.com/rest/v1.1/sites/${siteUrl}/posts?number=40`;
+    console.log(`Dynamic fetching 40 latest lyrics posts from live blog: ${url}`);
+    
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 4000); // 4-second timeout to keep the app responsive
+    
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
+    
+    if (!response.ok) {
+      console.warn(`WordPress Public API returned non-OK status: ${response.status}`);
+      return [];
+    }
+    const data = await response.json();
+    return data.posts || [];
+  } catch (e) {
+    console.warn("Could not dynamically connect to WordPress Public API posts:", e);
+    return [];
+  }
+}
 
 // Simulated WordPress JWT store: token -> expiry timestamp
 const activeWordPressTokens = new Map<string, number>();
@@ -67,6 +202,7 @@ async function startServer() {
       const index = playlists.findIndex(p => p.id === id);
       if (index !== -1) {
         playlists[index] = { id, name, description, coverUrl, genre, songIds: songIds || [] };
+        savePlaylistsToDisk();
         res.json(playlists[index]);
         return;
       }
@@ -82,12 +218,74 @@ async function startServer() {
       songIds: songIds || []
     };
     playlists.push(newPlaylist);
+    savePlaylistsToDisk();
     res.status(201).json(newPlaylist);
   });
 
   // Get all songs
-  app.get("/api/songs", (req, res) => {
-    res.json(songs);
+  app.get("/api/songs", async (req, res) => {
+    // Fetch live posts from the WordPress blog
+    const siteUrl = (req.query.site as string) || "psalmify.wordpress.com";
+    const wpPosts = await fetchWordPressPosts(siteUrl);
+    
+    // Map WordPress posts to Song format
+    const wpSongs = wpPosts.map(post => {
+      let title = post.title || "";
+      // Strip any tags, decode standard entities
+      title = title.replace(/<[^>]+>/g, "")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#8211;/g, "-")
+        .replace(/&ndash;/g, "-")
+        .replace(/&mdash;/g, "-")
+        .replace(/&#8217;/g, "'")
+        .trim();
+      
+      let artist = "Various Artists";
+      if (title.toLowerCase().startsWith("lyrics:")) {
+        const cleanTitle = title.replace(/^lyrics:\s*/i, "");
+        const parts = cleanTitle.split(/\s+-\s+/);
+        if (parts.length >= 2) {
+          title = parts[0].trim();
+          artist = parts.slice(1).join(" - ").trim();
+        } else {
+          title = cleanTitle.trim();
+        }
+      }
+
+      const content = post.content || "";
+      const rawLyrics = convertHtmlToRawLyrics(content);
+      const formattedLyrics = parseRawLyrics(rawLyrics);
+
+      return {
+        id: `wp_${post.ID}`,
+        title,
+        artist,
+        album: "WordPress Live",
+        genre: "Acoustic", // Fallback genre
+        rawLyrics,
+        formattedLyrics,
+        coverUrl: post.featured_image || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+        duration: "3:40",
+        isFeatured: false,
+        link: post.URL
+      };
+    }).filter(s => s.rawLyrics && s.rawLyrics.trim().length > 0);
+
+    // Merge WordPress live posts into our local array, prioritizing the local array for edits
+    const mergedSongs = [...songs];
+    wpSongs.forEach(wpS => {
+      const exists = mergedSongs.some(
+        s => s.title.toLowerCase().trim() === wpS.title.toLowerCase().trim() && 
+             s.artist.toLowerCase().trim() === wpS.artist.toLowerCase().trim()
+      );
+      if (!exists) {
+        mergedSongs.push(wpS);
+      }
+    });
+
+    res.json(mergedSongs);
   });
 
   // Save / Upload Song (Admin Panel creation and update)
@@ -158,6 +356,9 @@ async function startServer() {
       });
     }
 
+    saveSongsToDisk();
+    savePlaylistsToDisk();
+
     res.status(200).json(targetSong);
   });
 
@@ -169,6 +370,8 @@ async function startServer() {
     playlists.forEach(p => {
       p.songIds = p.songIds.filter(sid => sid !== id);
     });
+    saveSongsToDisk();
+    savePlaylistsToDisk();
     res.json({ success: true, message: "Song successfully deleted." });
   });
 
@@ -443,16 +646,22 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
       return;
     }
 
+    // Accept redirect_uri from request query param or fall back to APP_URL
+    const clientRedirectUri = req.query.redirect_uri as string;
     const appUrl = process.env.APP_URL || "https://ais-dev-7tkhecepw4twy6vpgjwurc-741505619319.asia-southeast1.run.app";
-    const redirectUri = `${appUrl}/auth/callback`;
+    const redirectUri = clientRedirectUri || `${appUrl}/auth/callback`;
+
+    // Secure state contains the exact redirectUri to pass it forward
+    const stateObj = { redirect_uri: redirectUri };
+    const stateVal = Buffer.from(JSON.stringify(stateObj)).toString("base64");
 
     // Construct WordPress OAuth authorization URL
-    const authUrl = `https://public-api.wordpress.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=posts`;
+    const authUrl = `https://public-api.wordpress.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=posts&state=${stateVal}`;
     res.json({ url: authUrl });
   });
 
   app.get(["/auth/callback", "/auth/callback/"], async (req, res) => {
-    const { code, error, error_description } = req.query;
+    const { code, state, error, error_description } = req.query;
 
     if (error) {
       res.send(`
@@ -481,8 +690,18 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
     }
 
     try {
-      const appUrl = process.env.APP_URL || "https://ais-dev-7tkhecepw4twy6vpgjwurc-741505619319.asia-southeast1.run.app";
-      const redirectUri = `${appUrl}/auth/callback`;
+      // Decode redirect_uri from state
+      let redirectUri = `${process.env.APP_URL || "https://ais-dev-7tkhecepw4twy6vpgjwurc-741505619319.asia-southeast1.run.app"}/auth/callback`;
+      if (state) {
+        try {
+          const decodedState = JSON.parse(Buffer.from(state as string, "base64").toString("utf-8"));
+          if (decodedState.redirect_uri) {
+            redirectUri = decodedState.redirect_uri;
+          }
+        } catch (e) {
+          console.error("Failed to decode OAuth state:", e);
+        }
+      }
 
       // Exchange code for Access Token
       const tokenResponse = await fetch("https://public-api.wordpress.com/oauth2/token", {
