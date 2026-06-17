@@ -340,7 +340,7 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
         code: "jwt_auth_expired",
         message: "Your WordPress JWT Session Token has expired. Please log in again.",
         data: { status: 430 } 
-      });
+       });
        return;
     }
 
@@ -370,7 +370,6 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
         protected: false
       },
       comment_status: "open",
-      ping_status: "open",
       author: 1,
       sticky: false,
       template: "",
@@ -384,6 +383,46 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
     });
   });
 
+  // REAL WORDPRESS.COM REST API POST PROXY ENDPOINT
+  app.post("/api/wordpress/post", async (req, res) => {
+    const { title, content, token, blog_url } = req.body;
+    if (!token) {
+      res.status(401).json({ error: "No active WordPress access token provided. Please connect first." });
+      return;
+    }
+
+    try {
+      const siteId = blog_url || "psalmify.wordpress.com";
+      const wpResponse = await fetch(`https://public-api.wordpress.com/rest/v1.1/sites/${encodeURIComponent(siteId)}/posts/new`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title,
+          content,
+          status: "publish"
+        })
+      });
+
+      const wpData = await wpResponse.json();
+
+      if (!wpResponse.ok) {
+        res.status(wpResponse.status).json({ message: wpData.message || "Failed to create post on WordPress.com." });
+        return;
+      }
+
+      res.status(201).json({
+        link: wpData.URL || wpData.link,
+        message: "Successfully synchronized and published to WordPress.com!"
+      });
+    } catch (err: any) {
+      console.error("Proxy publishing error:", err);
+      res.status(500).json({ message: `Exception publishing to WordPress.com: ${err.message}` });
+    }
+  });
+
   // Verify Single-Admin static credentials or token
   app.post("/api/admin/verify", (req, res) => {
     const { password } = req.body;
@@ -391,6 +430,117 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
       res.json({ success: true, token: "admin_dashboard_token_vibe" });
     } else {
       res.status(401).json({ success: false, message: "Invalid administrator password." });
+    }
+  });
+
+  // ==========================================
+  // REAL WORDPRESS OAUTH 2.0 ROUTING HANDLERS
+  // ==========================================
+  app.get("/api/wordpress/oauth/url", (req, res) => {
+    const clientId = process.env.WORDPRESS_CLIENT_ID;
+    if (!clientId) {
+      res.status(400).json({ error: "WordPress Client ID is not configured in environment variables." });
+      return;
+    }
+
+    const appUrl = process.env.APP_URL || "https://ais-dev-7tkhecepw4twy6vpgjwurc-741505619319.asia-southeast1.run.app";
+    const redirectUri = `${appUrl}/auth/callback`;
+
+    // Construct WordPress OAuth authorization URL
+    const authUrl = `https://public-api.wordpress.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=posts`;
+    res.json({ url: authUrl });
+  });
+
+  app.get(["/auth/callback", "/auth/callback/"], async (req, res) => {
+    const { code, error, error_description } = req.query;
+
+    if (error) {
+      res.send(`
+        <html>
+          <body style="font-family: sans-serif; background-color: #0a0a0c; color: #f8f9fa; padding: 40px; text-align: center;">
+            <h2 style="color: #ef4444;">WordPress Connection Failed</h2>
+            <p>${error_description || error}</p>
+            <button onclick="window.close()" style="background: #e11d48; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 15px;">Close Window</button>
+          </body>
+        </html>
+      `);
+      return;
+    }
+
+    if (!code) {
+      res.status(400).send("No authorization code provided.");
+      return;
+    }
+
+    const clientId = process.env.WORDPRESS_CLIENT_ID;
+    const clientSecret = process.env.WORDPRESS_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      res.status(500).send("WordPress OAuth client credentials are not configured on the server.");
+      return;
+    }
+
+    try {
+      const appUrl = process.env.APP_URL || "https://ais-dev-7tkhecepw4twy6vpgjwurc-741505619319.asia-southeast1.run.app";
+      const redirectUri = `${appUrl}/auth/callback`;
+
+      // Exchange code for Access Token
+      const tokenResponse = await fetch("https://public-api.wordpress.com/oauth2/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          code: code as string,
+          grant_type: "authorization_code"
+        })
+      });
+
+      const tokenData = await tokenResponse.json();
+
+      if (!tokenResponse.ok) {
+        throw new Error(tokenData.error_description || tokenData.error || "Failed to exchange token");
+      }
+
+      const { access_token, blog_id, blog_url } = tokenData;
+
+      // Render callback success HTML which posts a message to Aura Lyrics main App
+      res.send(`
+        <html>
+          <body style="font-family: sans-serif; background-color: #0a0a0c; color: #f8f9fa; padding: 40px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh;">
+            <div style="background: #1e1b4b; border: 1px solid #dc2626; padding: 30px; border-radius: 20px; max-width: 400px; box-shadow: 0 10px 30px rgba(225, 29, 72, 0.1);">
+              <div style="width: 50px; height: 50px; background: rgba(225, 29, 72, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-weight: bold; color: #ef4444; font-size: 24px;">✓</div>
+              <h2 style="margin: 0 0 10px 0; font-size: 20px;">Connected Successfully!</h2>
+              <p style="font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.6; margin: 0 0 20px 0;">
+                Your site <strong>psalmify.wordpress.com</strong> is now securely bridged to Aura Lyrics.
+              </p>
+              <p style="font-size: 11px; font-family: monospace; color: rgba(255,255,255,0.4);">
+                Syncing secure credentials with workspace...
+              </p>
+            </div>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ 
+                  type: 'WP_OAUTH_SUCCESS', 
+                  token: '${access_token}', 
+                  blog_id: '${blog_id || ""}', 
+                  blog_url: '${blog_url || ""}' 
+                }, '*');
+                setTimeout(() => window.close(), 1500);
+              } else {
+                window.location.href = '/';
+              }
+            </script>
+          </body>
+        </html>
+      `);
+
+    } catch (err: any) {
+      console.error("WordPress OAuth Error Exception:", err);
+      res.status(500).send(`Exception exchanging code: ${err.message}`);
     }
   });
 

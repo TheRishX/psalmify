@@ -53,6 +53,47 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
   const [syncedWPLink, setSyncedWPLink] = useState('');
   const [localSaveStatus, setLocalSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
+  // Real WordPress OAuth 2.0 States
+  const [isRealWP, setIsRealWP] = useState(false);
+  const [wpBlogId, setWpBlogId] = useState('');
+  const [wpBlogUrl, setWpBlogUrl] = useState('psalmify.wordpress.com');
+  const [wpMode, setWpMode] = useState<'live' | 'simulated'>('live');
+
+  // Listen to OAuth success events from popup
+  useEffect(() => {
+    const handleOAuthMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      // Allow AI Studio preview domains & localhost
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost') && !origin.includes('ai.studio')) {
+        return;
+      }
+
+      if (event.data?.type === 'WP_OAUTH_SUCCESS') {
+        const { token, blog_id, blog_url } = event.data;
+        if (token) {
+          setWpToken(token);
+          // Real WordPress.com tokens do not expire quickly (usually long-lived), so let's set a 1-year expiry
+          const longExpiry = Date.now() + 365 * 24 * 60 * 60 * 1000;
+          setWpTokenExpiry(longExpiry);
+          setWpTokenTimeLeft(365 * 24 * 60 * 60);
+          setIsRealWP(true);
+          if (blog_id) setWpBlogId(blog_id);
+          if (blog_url) {
+            // strip http/https for blog domain
+            const stripped = blog_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            setWpBlogUrl(stripped);
+          }
+          setWpAuthError('');
+          setSyncStatus('idle');
+          setSyncMessage('Successfully authenticated with psalmify.wordpress.com!');
+        }
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, []);
+
   // Trigger preview on raw lyric input
   useEffect(() => {
     const parsed = parseRawLyrics(songRawLyrics);
@@ -95,6 +136,41 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
     } catch (err) {
       setAdminLoginError('Server communication issue.');
     }
+  };
+
+  // Trigger real WordPress OAuth popups
+  const handleWordPressOAuth = async () => {
+    try {
+      const res = await fetch('/api/wordpress/oauth/url');
+      if (!res.ok) {
+        const errData = await res.json();
+        alert(errData.error || 'To connect your real blog, please configure WORDPRESS_CLIENT_ID and WORDPRESS_CLIENT_SECRET variables in your workspace settings.');
+        return;
+      }
+      const { url } = await res.json();
+      
+      const width = 600;
+      const height = 700;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+      
+      window.open(
+        url,
+        'wordpress_oauth_popup',
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+      );
+    } catch (err: any) {
+      alert('Could not start WordPress OAuth flow: ' + err.message);
+    }
+  };
+
+  const handleDisconnectWP = () => {
+    setWpToken('');
+    setWpTokenExpiry(0);
+    setWpTokenTimeLeft(0);
+    setIsRealWP(false);
+    setSyncStatus('idle');
+    setSyncMessage('Disconnected WordPress site successfully.');
   };
 
   // Acquire Simulated WordPress JWT rest credential
@@ -300,24 +376,38 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
       // Small simulated latency to depict real gateway handshakes
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      const res = await fetch('/wp-json/wp/v2/posts', {
+      const endpoint = isRealWP ? '/api/wordpress/post' : '/wp-json/wp/v2/posts';
+      const bodyPayload = isRealWP 
+        ? {
+            title: `Lyrics: ${songTitle} - ${songArtist}`,
+            content: compiledHTML,
+            token: wpToken,
+            blog_url: wpBlogUrl
+          }
+        : {
+            title: `Lyrics: ${songTitle} - ${songArtist}`,
+            content: compiledHTML,
+            status: 'publish'
+          };
+
+      const headersPayload: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (!isRealWP) {
+        headersPayload['Authorization'] = `Bearer ${wpToken}`;
+      }
+
+      const res = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${wpToken}`
-        },
-        body: JSON.stringify({
-          title: `Lyrics: ${songTitle} - ${songArtist}`,
-          content: compiledHTML,
-          status: 'publish'
-        })
+        headers: headersPayload,
+        body: JSON.stringify(bodyPayload)
       });
 
       const data = await res.json();
 
       if (res.status === 201) {
         setSyncStatus('success');
-        setSyncMessage('Payload Successfully published! Synced to remote WordPress database.');
+        setSyncMessage(isRealWP ? 'Published successfully to upperroomx.wordpress.com!' : 'Payload Successfully published! Synced to remote WordPress database.');
         setSyncedWPLink(data.link || '#');
         
         // Also save changes to local in-memory database representation to be nice & sync!
@@ -325,11 +415,11 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
       } else {
         setSyncStatus('error');
         // Extracted descriptive WordPress structure error
-        setSyncMessage(data.message || 'REST Synchronization failed. Check authentication header credentials.');
+        setSyncMessage(data.message || 'REST Synchronization failed. Check credentials.');
       }
     } catch (e) {
       setSyncStatus('error');
-      setSyncMessage('CORS or Connection handshake refused by WordPress REST handler.');
+      setSyncMessage('Connection handshake refused by WordPress REST handler.');
     } finally {
       setIsSyncing(false);
     }
@@ -620,102 +710,176 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
                   <div className="flex items-center justify-between border-b border-white/5 pb-3">
                     <h3 className="font-bold text-white text-xs tracking-tight flex items-center gap-1.5 font-sans">
                       <Globe className="w-4 h-4 text-rose-500" />
-                      Simulated WordPress Gate (REST Sync v2)
+                      WordPress Publish Manager
                     </h3>
-                    <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 border border-amber-500/20 rounded font-mono font-bold uppercase">
-                      JWT Auth Gateway
-                    </span>
+                    
+                    {/* Switcher Tab */}
+                    <div className="flex bg-[#0a0a0c] border border-white/10 p-0.5 rounded-lg text-[9px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => { setWpMode('live'); setIsRealWP(true); }}
+                        className={`px-2 py-1 rounded-md font-bold cursor-pointer transition ${
+                          wpMode === 'live' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'text-white/40 hover:text-white/70 border border-transparent'
+                        }`}
+                      >
+                        Live Blog (OAuth)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setWpMode('simulated'); setIsRealWP(false); }}
+                        className={`px-2 py-1 rounded-md font-bold cursor-pointer transition ${
+                          wpMode === 'simulated' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-white/40 hover:text-white/70 border border-transparent'
+                        }`}
+                      >
+                        Local Simulator
+                      </button>
+                    </div>
                   </div>
 
-                  {!wpToken ? (
-                    <form onSubmit={handleWPLogin} className="space-y-3">
-                      <p className="text-[11px] text-white/50 leading-relaxed font-mono">
-                        To synchronize the final beautiful, styles-intact HTML layout directly into the WordPress post table databases, acquire a session JWT token.
-                      </p>
-                      
-                      <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                        <div className="bg-[#0a0a0c] border border-white/5 rounded p-1.5">
-                          <span className="text-[9px] text-white/40 block">DEFAULT USER</span>
-                          <span className="text-white/90 font-bold block">admin</span>
-                        </div>
-                        <div className="bg-[#0a0a0c] border border-white/5 rounded p-1.5">
-                          <span className="text-[9px] text-white/40 block">DEFAULT PASSWORD</span>
-                          <span className="text-white/90 font-bold block">admin123</span>
-                        </div>
-                      </div>
+                  {wpMode === 'live' ? (
+                    <div className="space-y-3">
+                      {!wpToken || !isRealWP ? (
+                        <div className="space-y-3">
+                          <p className="text-[11px] text-white/50 leading-relaxed font-mono">
+                            Connect your live WordPress.com blog (<span className="text-rose-400 font-bold">psalmify.wordpress.com</span>) securely. No plugins or upgrades required!
+                          </p>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-mono text-white/40 block">WP USERNAME</span>
-                          <input
-                            type="text"
-                            value={wpUsername}
-                            onChange={(e) => setWpUsername(e.target.value)}
-                            className="w-full bg-[#0a0a0c] border border-white/10 rounded-lg p-2 text-xs text-white placeholder:text-white/20"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-mono text-white/40 block">WP PASSWORD</span>
-                          <input
-                            type="password"
-                            value={wpPassword}
-                            onChange={(e) => setWpPassword(e.target.value)}
-                            className="w-full bg-[#0a0a0c] border border-white/10 rounded-lg p-2 text-xs text-white placeholder:text-white/20"
-                          />
-                        </div>
-                      </div>
+                          <div className="p-3 bg-[#0a0a0c] border border-white/5 rounded-xl space-y-2 text-[11px] font-mono text-white/60">
+                            <span className="text-[9px] text-white/30 block uppercase font-bold">Bridge Settings</span>
+                            <div>• Target: <span className="text-white">psalmify.wordpress.com</span></div>
+                            <div>• Auth Protocol: <span className="text-white">OAuth 2.0 Web Authorization flow</span></div>
+                          </div>
 
-                      {wpAuthError && (
-                        <p className="text-xs text-red-400 font-mono pt-1 flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          Invalid WP details.
-                        </p>
+                          <button
+                            type="button"
+                            onClick={handleWordPressOAuth}
+                            className="w-full py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 border border-rose-500/20 text-white rounded-xl text-xs font-mono font-bold transition shadow-md shadow-rose-600/10 cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <Globe className="w-4 h-4" />
+                            Connect WordPress.com Site
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 font-mono text-xs">
+                          <div className="p-3 bg-[#0a0a0c] border border-white/5 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-white/40 text-[10px]">CONNECTED HOST:</span>
+                              <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                                LIVE SECURE SYNC
+                              </span>
+                            </div>
+                            <p className="text-[12px] text-white font-bold">{wpBlogUrl || 'psalmify.wordpress.com'}</p>
+                            
+                            <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[10px]">
+                              <span className="text-white/30">OAUTH ACCESS TOKEN:</span>
+                              <span className="text-emerald-400 font-mono truncate max-w-[150px] block">{wpToken.substring(0, 15)}...</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleDisconnectWP}
+                            className="w-full py-1.5 bg-red-950/10 hover:bg-red-950/25 border border-red-900/20 text-red-400 text-[10px] uppercase font-bold rounded-lg transition cursor-pointer"
+                          >
+                            Disconnect Site
+                          </button>
+                        </div>
                       )}
-
-                      <button
-                        type="submit"
-                        className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-mono transition-colors cursor-pointer"
-                      >
-                        {wpIsAuthenticating ? 'Issuing WP Rest Token...' : 'Acquire WordPress JWT Session Token'}
-                      </button>
-                    </form>
+                    </div>
                   ) : (
-                    <div className="space-y-3 font-mono text-xs">
-                      <div className="p-3 bg-[#0a0a0c] border border-white/5 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/40 text-[10px]">AUTH HANDSHAKE TOKEN:</span>
-                          <span className="text-emerald-400 text-[10px] font-bold">✓ ACTIVE SESSION</span>
-                        </div>
-                        <p className="text-[11px] text-white/90 font-mono truncate">{wpToken}</p>
-                        
-                        <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[10px]">
-                          <span className="text-white/30">JWT Token Expiry:</span>
-                          {wpTokenTimeLeft > 0 ? (
-                            <span className="text-amber-400 font-bold">{wpTokenTimeLeft} Seconds Remaining</span>
-                          ) : (
-                            <span className="text-red-400 font-bold">EXPIRED JWT STATUS</span>
-                          )}
-                        </div>
-                      </div>
+                    <div>
+                      {!wpToken || isRealWP ? (
+                        <form onSubmit={handleWPLogin} className="space-y-3">
+                          <p className="text-[11px] text-white/50 leading-relaxed font-mono">
+                            To synchronize the final beautiful, styles-intact HTML layout directly into the WordPress post table databases, acquire a session JWT token.
+                          </p>
+                          
+                          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                            <div className="bg-[#0a0a0c] border border-white/5 rounded p-1.5">
+                              <span className="text-[9px] text-white/40 block">DEFAULT USER</span>
+                              <span className="text-white/90 font-bold block">admin</span>
+                            </div>
+                            <div className="bg-[#0a0a0c] border border-white/5 rounded p-1.5">
+                              <span className="text-[9px] text-white/40 block">DEFAULT PASSWORD</span>
+                              <span className="text-white/90 font-bold block">admin123</span>
+                            </div>
+                          </div>
 
-                      {/* Token operations panel cluster */}
-                      <div className="flex justify-between gap-2.5">
-                        <button
-                          type="button"
-                          onClick={autoWPLogin}
-                          className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-[10px] uppercase font-bold rounded-lg transition cursor-pointer"
-                        >
-                          Refresh JWT Token
-                        </button>
-                        <button
-                          type="button"
-                          onClick={triggerSimulatedTokenExpiry}
-                          className="flex-1 py-1.5 bg-red-950/10 hover:bg-red-950/25 border border-red-900/20 text-red-400 text-[10px] uppercase font-bold rounded-lg transition cursor-pointer"
-                          title="Simulate token expiration to satisfy fallback verification check"
-                        >
-                          Simulate Token Expiry
-                        </button>
-                      </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-mono text-white/40 block">WP USERNAME</span>
+                              <input
+                                type="text"
+                                value={wpUsername}
+                                onChange={(e) => setWpUsername(e.target.value)}
+                                className="w-full bg-[#0a0a0c] border border-white/10 rounded-lg p-2 text-xs text-white placeholder:text-white/20"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-mono text-white/40 block">WP PASSWORD</span>
+                              <input
+                                type="password"
+                                value={wpPassword}
+                                onChange={(e) => setWpPassword(e.target.value)}
+                                className="w-full bg-[#0a0a0c] border border-white/10 rounded-lg p-2 text-xs text-white placeholder:text-white/20"
+                              />
+                            </div>
+                          </div>
+
+                          {wpAuthError && (
+                            <p className="text-xs text-red-400 font-mono pt-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              Invalid WP details.
+                            </p>
+                          )}
+
+                          <button
+                            type="submit"
+                            className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-mono transition-colors cursor-pointer"
+                          >
+                            {wpIsAuthenticating ? 'Issuing WP Rest Token...' : 'Acquire WordPress JWT Session Token'}
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="space-y-3 font-mono text-xs">
+                          <div className="p-3 bg-[#0a0a0c] border border-white/5 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-white/40 text-[10px]">AUTH HANDSHAKE TOKEN:</span>
+                              <span className="text-emerald-400 text-[10px] font-bold">✓ ACTIVE SESSION</span>
+                            </div>
+                            <p className="text-[11px] text-white/90 font-mono truncate">{wpToken}</p>
+                            
+                            <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[10px]">
+                              <span className="text-white/30">JWT Token Expiry:</span>
+                              {wpTokenTimeLeft > 0 ? (
+                                <span className="text-amber-400 font-bold">{wpTokenTimeLeft} Seconds Remaining</span>
+                              ) : (
+                                <span className="text-red-400 font-bold">EXPIRED JWT STATUS</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Token operations panel cluster */}
+                          <div className="flex justify-between gap-2.5">
+                            <button
+                              type="button"
+                              onClick={autoWPLogin}
+                              className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-[10px] uppercase font-bold rounded-lg transition cursor-pointer"
+                            >
+                              Refresh JWT Token
+                            </button>
+                            <button
+                              type="button"
+                              onClick={triggerSimulatedTokenExpiry}
+                              className="flex-1 py-1.5 bg-red-950/10 hover:bg-red-950/25 border border-red-900/20 text-red-400 text-[10px] uppercase font-bold rounded-lg transition cursor-pointer"
+                              title="Simulate token expiration to satisfy fallback verification check"
+                            >
+                              Simulate Token Expiry
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
