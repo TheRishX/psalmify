@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { DEFAULT_SONGS, DEFAULT_PLAYLISTS } from "./src/data/defaultData";
 import { parseRawLyrics } from "./src/utils/lyricParser";
 import { GoogleGenAI } from "@google/genai";
@@ -767,6 +766,7 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
     const PORT = 3000;
     if (process.env.NODE_ENV !== "production") {
       console.log("Hooking Vite middleware for dev runtime.");
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
