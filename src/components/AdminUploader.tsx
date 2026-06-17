@@ -74,6 +74,8 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user, o
   const [wpBlogId, setWpBlogId] = useState<string>(() => (typeof window !== 'undefined' && localStorage.getItem('wpBlogId')) || '');
   const [wpBlogUrl, setWpBlogUrl] = useState<string>(() => (typeof window !== 'undefined' && localStorage.getItem('wpBlogUrl')) || 'psalmify.wordpress.com');
   const [wpMode, setWpMode] = useState<'live' | 'simulated'>(() => (typeof window !== 'undefined' && (localStorage.getItem('wpMode') as 'live' | 'simulated')) || 'simulated');
+  const [redirectCopied, setRedirectCopied] = useState(false);
+  const [wpDiaOpen, setWpDiaOpen] = useState(true); // default true to proactively assist the user with their diagnosis!
 
   const [previewSections, setPreviewSections] = useState<FormattedSection[]>([]);
 
@@ -1623,7 +1625,7 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user, o
 
                             {/* Show Token Status */}
                             {wpToken ? (
-                              <div className="bg-emerald-50 border border-emerald-205 p-4 rounded-xl space-y-2.5 text-xs font-sans text-emerald-850">
+                              <div className="bg-emerald-50 border border-emerald-250 p-4 rounded-xl space-y-2.5 text-xs font-sans text-emerald-850">
                                 <div className="flex items-center gap-2 font-bold font-mono text-[10px] uppercase text-emerald-900">
                                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                   <span>OAuth Blog Handshake established</span>
@@ -1642,16 +1644,111 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user, o
                                 </button>
                               </div>
                             ) : (
-                              <div className="space-y-2 text-center pt-2">
-                                <button
-                                  type="button"
-                                  onClick={handleWordPressOAuth}
-                                  className="mx-auto py-3 px-5 bg-slate-900 border border-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-                                >
-                                  <Globe className="w-4 h-4 text-emerald-400 fill-current animate-pulse" />
-                                  <span>Connect to WordPress.com via OAuth</span>
-                                </button>
-                                <p className="text-[10px] text-slate-400 font-mono">Requires client identifiers inside your workspace secrets configuration.</p>
+                              <div className="space-y-4 pt-2">
+                                <div className="space-y-2 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={handleWordPressOAuth}
+                                    className="w-full py-3 px-5 bg-slate-900 border border-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                                  >
+                                    <Globe className="w-4 h-4 text-emerald-400 fill-current animate-pulse" />
+                                    <span>Connect to WordPress.com via OAuth</span>
+                                  </button>
+                                  <p className="text-[10px] text-slate-400 font-mono">Requires client identifiers inside your workspace secrets configuration.</p>
+                                </div>
+
+                                {/* WORDPRESS OAUTH DIAGNOSTICS & LOGGING TOOL */}
+                                <div className="mt-6 border border-slate-200 bg-slate-50/50 rounded-2xl p-5 space-y-4 text-left">
+                                  <div className="flex items-center justify-between border-b border-slate-150 pb-3">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldAlert className="w-4 h-4 text-amber-500" />
+                                      <span className="text-xs font-sans font-black text-slate-800 uppercase tracking-wider">OAuth Diagnostics & Callback Sync</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setWpDiaOpen(!wpDiaOpen)}
+                                      className="px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 transition text-[9px] font-mono font-bold text-slate-600 cursor-pointer"
+                                    >
+                                      {wpDiaOpen ? "Hide" : "Expand Guide"}
+                                    </button>
+                                  </div>
+
+                                  {wpDiaOpen && (
+                                    <div className="space-y-4 text-xs">
+                                      <p className="text-slate-600 leading-relaxed font-sans">
+                                        The <strong className="text-slate-800">"Mismatch in redirect_uri"</strong> error is triggered because the Redirect URL registered in your WordPress Application Developer Console does not exactly match the hostname/address you are browsing from.
+                                      </p>
+
+                                      <div className="space-y-2.5">
+                                        <div className="bg-white border border-slate-205 rounded-xl p-3.5 space-y-2 shadow-xs">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-slate-450 uppercase tracking-wider font-mono">Required Redirect URL</span>
+                                            <span className="text-[9px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md font-bold">Copy & Paste inside WP</span>
+                                          </div>
+                                          
+                                          <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-150 rounded-lg p-2 font-mono text-[11px] text-slate-700">
+                                            <span className="truncate select-all bg-transparent outline-none max-w-[280px]">
+                                              {typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'https://psalmify.vercel.app/auth/callback'}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const urlToCopy = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'https://psalmify.vercel.app/auth/callback';
+                                                navigator.clipboard.writeText(urlToCopy);
+                                                setRedirectCopied(true);
+                                                setTimeout(() => setRedirectCopied(false), 2200);
+                                              }}
+                                              className="px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-800 text-[10px] font-bold font-sans cursor-pointer transition flex items-center gap-1.5 focus:outline-none"
+                                            >
+                                              {redirectCopied ? (
+                                                <>
+                                                  <Check className="w-3 h-3 text-emerald-400" />
+                                                  <span>Copied!</span>
+                                                </>
+                                              ) : (
+                                                <span>Copy</span>
+                                              )}
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        <div className="p-3.5 bg-amber-50/70 border border-amber-100 rounded-xl space-y-2">
+                                          <div className="flex items-center gap-2 font-mono text-[10px] uppercase font-black text-amber-800 tracking-wider">
+                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                                            <span>Active Site Environment Detection</span>
+                                          </div>
+                                          <ul className="space-y-1.5 text-[11px] text-amber-900 leading-relaxed font-sans">
+                                            <li>• Active Origin: <strong className="font-mono">{typeof window !== 'undefined' ? window.location.origin : 'https://psalmify.vercel.app'}</strong></li>
+                                            <li>• WP Application Type: <strong className="font-mono">Web Application</strong></li>
+                                            <li>• Auth Mechanism: <strong className="font-mono">OAuth 2.0 Authorization Code</strong></li>
+                                          </ul>
+                                        </div>
+                                      </div>
+
+                                      <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block font-mono">How to Configure Wordpress Dev Console</span>
+                                        <ol className="list-decimal pl-4 space-y-2 text-slate-650 font-sans leading-relaxed text-[11px]">
+                                          <li>
+                                            Go to <a href="https://developer.wordpress.com/apps/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-0.5 font-bold">Wordpress Developer Apps Dashboard <ArrowRight className="w-3 h-3 inline" /></a>
+                                          </li>
+                                          <li>
+                                            Click on your application card (e.g. your active API client) or create a new application if needed.
+                                          </li>
+                                          <li>
+                                            Locate the <strong className="text-slate-800 font-bold">Redirect URL</strong> text field field inside the App credentials section.
+                                          </li>
+                                          <li>
+                                            Delete any outdated URLs or localhost paths, paste the exact URL copied above: <code className="bg-slate-100 px-1 rounded text-red-600 font-bold font-mono text-[10px]">{typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'https://psalmify.vercel.app/auth/callback'}</code>, and click <strong className="text-indigo-600 font-bold">Update / Save</strong>.
+                                          </li>
+                                        </ol>
+                                      </div>
+
+                                      <p className="text-[10px] text-slate-400 italic">
+                                        OAuth protocol security guidelines forbid domain mismatches. If you deploy your app across different domains (e.g., from Vercel to AI Studio), you must update the registered Redirect URL in developer.wordpress.com each time.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
 
