@@ -763,6 +763,72 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
   // ==========================================
   // REAL WORDPRESS OAUTH 2.0 ROUTING HANDLERS
   // ==========================================
+  
+  // Sliding window log of WordPress OAuth attempts to act as an explicit physical diagnostics logging service
+  interface OauthAttemptLog {
+    timestamp: string;
+    clientIdLength: number;
+    clientIdMasked: string;
+    clientRedirectUriParam: string;
+    computedRedirectUri: string;
+    requestHeaders: any;
+    appUrlEnv: string;
+    vercelEnv: boolean;
+  }
+  const lastOauthAttempts: OauthAttemptLog[] = [];
+
+  app.get("/api/wordpress/oauth/diagnostics", (req, res) => {
+    // Enable CORS for external diagnostics if accessed from custom domains
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    const clientId = process.env.WORDPRESS_CLIENT_ID || "";
+    const clientSecret = process.env.WORDPRESS_CLIENT_SECRET || "";
+
+    const mask = (str: string) => {
+      if (!str) return "NOT_CONFIGURED";
+      const cleanStr = str.trim();
+      const hasSpaces = str.length !== cleanStr.length;
+      const maskStr = cleanStr.length > 8 
+        ? `${cleanStr.substring(0, 4)}...${cleanStr.substring(cleanStr.length - 4)}` 
+        : `${cleanStr.substring(0, 2)}...`;
+      return hasSpaces ? `${maskStr} [WARNING: Contains spaces/whitespace!]` : maskStr;
+    };
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      environment: {
+        VERCEL: !!process.env.VERCEL,
+        NODE_ENV: process.env.NODE_ENV,
+        APP_URL: process.env.APP_URL || null,
+        WORDPRESS_CLIENT_ID: {
+          configured: !!clientId,
+          length: clientId.length,
+          masked: mask(clientId),
+          hasSpaces: clientId !== clientId.trim(),
+          isNumericOnly: /^\d+$/.test(clientId.trim())
+        },
+        WORDPRESS_CLIENT_SECRET: {
+          configured: !!clientSecret,
+          length: clientSecret.length,
+          masked: mask(clientSecret),
+          hasSpaces: clientSecret !== clientSecret.trim()
+        }
+      },
+      activeRequest: {
+        host: req.headers.host,
+        referer: req.headers.referer,
+        xForwardedHost: req.headers["x-forwarded-host"],
+        xForwardedProto: req.headers["x-forwarded-proto"],
+        url: req.url,
+        origin: req.headers.origin
+      },
+      lastOauthAttempts
+    });
+  });
+
   app.get("/api/wordpress/oauth/url", (req, res) => {
     const clientId = process.env.WORDPRESS_CLIENT_ID;
     if (!clientId) {
@@ -774,6 +840,28 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
     const clientRedirectUri = req.query.redirect_uri as string;
     const appUrl = process.env.APP_URL || "https://ais-dev-7tkhecepw4twy6vpgjwurc-741505619319.asia-southeast1.run.app";
     const redirectUri = clientRedirectUri || `${appUrl}/auth/callback`;
+
+    // Log the constructed redirect uri attempt to our local diagnostic server logging service
+    const cleanOrig = clientRedirectUri || "";
+    const logAttempt: OauthAttemptLog = {
+      timestamp: new Date().toISOString(),
+      clientIdLength: clientId ? clientId.length : 0,
+      clientIdMasked: clientId ? (clientId.trim().length > 6 ? clientId.trim().substring(0, 4) + '...' : '...') : 'N/A',
+      clientRedirectUriParam: cleanOrig,
+      computedRedirectUri: redirectUri,
+      requestHeaders: {
+        host: req.headers.host,
+        referer: req.headers.referer,
+        xForwardedHost: req.headers["x-forwarded-host"],
+        xForwardedProto: req.headers["x-forwarded-proto"]
+      },
+      appUrlEnv: process.env.APP_URL || "",
+      vercelEnv: !!process.env.VERCEL
+    };
+    lastOauthAttempts.unshift(logAttempt);
+    if (lastOauthAttempts.length > 25) {
+      lastOauthAttempts.pop();
+    }
 
     // Secure state contains the exact redirectUri to pass it forward
     const stateObj = { redirect_uri: redirectUri };

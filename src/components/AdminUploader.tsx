@@ -11,7 +11,7 @@ import {
   Lock, Sparkles, FileText, Globe, RefreshCcw, Check, 
   AlertTriangle, Loader2, Save, Trash2, ListMusic as PlaylistIcon, Plus, Eye,
   Settings, LogOut, CheckCircle2, ChevronRight, Share2, ArrowRight,
-  Inbox, List, Layers, ShieldAlert, BadgeInfo, FileEdit, PlusCircle
+  Inbox, List, Layers, ShieldAlert, BadgeInfo, FileEdit, PlusCircle, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -76,6 +76,47 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user, o
   const [wpMode, setWpMode] = useState<'live' | 'simulated'>(() => (typeof window !== 'undefined' && (localStorage.getItem('wpMode') as 'live' | 'simulated')) || 'simulated');
   const [redirectCopied, setRedirectCopied] = useState(false);
   const [wpDiaOpen, setWpDiaOpen] = useState(true); // default true to proactively assist the user with their diagnosis!
+
+  const [diagResults, setDiagResults] = useState<any>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagError, setDiagError] = useState<string | null>(null);
+
+  const handleRunDiagnostics = async () => {
+    setDiagLoading(true);
+    setDiagError(null);
+    setDiagResults(null);
+    try {
+      const res = await fetch('/api/wordpress/oauth/diagnostics');
+      const contentType = res.headers.get('content-type') || '';
+      
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error("Diagnostics returned non-JSON:", text);
+        
+        let extraInfo = "The server did not respond with a valid JSON payload. Instead, it returned an HTML body.";
+        if (text.includes("A server error occurred") || text.includes("An error occurred") || text.includes("500") || text.includes("Vercel Boot Exception")) {
+          extraInfo = "Vercel's serverless backend function has crashed at boot-time. This is often caused by a compilation error, a syntax problem in server.ts, or a missing environment variable dependency.";
+        } else if (text.trim().startsWith("<!DOCTYPE html>") || text.includes("<html")) {
+          extraInfo = "Vercel returned your static index.html. This means the rewrites inside your `vercel.json` are inactive, or Vercel failed to map the serverless dynamic functions at `/api/wordpress/*` correctly.";
+        }
+        
+        setDiagError(`${extraInfo}\n\n[Raw Output Segment]:\n${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`);
+        return;
+      }
+
+      const data = await res.json();
+      if (!res.ok) {
+        setDiagError(data.error || 'Server returned an error status during diagnostic checks.');
+        return;
+      }
+      setDiagResults(data);
+    } catch (err: any) {
+      console.error("Failed to run diagnostics:", err);
+      setDiagError(`Unreachable server or connection issue: ${err.message || String(err)}`);
+    } finally {
+      setDiagLoading(false);
+    }
+  };
 
   const [previewSections, setPreviewSections] = useState<FormattedSection[]>([]);
 
@@ -1710,6 +1751,107 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user, o
                                               )}
                                             </button>
                                           </div>
+                                        </div>
+
+                                        {/* INTERACTIVE DIAGNOSTIC TRIGGER */}
+                                        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-xs">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-indigo-900 uppercase tracking-wider font-mono">Real-Time Flow Analysis</span>
+                                            <button
+                                              type="button"
+                                              onClick={handleRunDiagnostics}
+                                              disabled={diagLoading}
+                                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 font-bold transition text-[10px] font-sans flex items-center gap-1.5 cursor-pointer"
+                                            >
+                                              {diagLoading ? (
+                                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                              ) : (
+                                                <ShieldCheck className="w-3.5 h-3.5" />
+                                              )}
+                                              <span>Run Flow Diagnostics</span>
+                                            </button>
+                                          </div>
+
+                                          {/* DIAGNOSTIC RESULTS */}
+                                          {diagError && (
+                                            <div className="p-3 bg-rose-50 border border-rose-150 rounded-lg text-rose-800 font-sans text-[11px] leading-relaxed whitespace-pre-wrap font-medium">
+                                              <strong className="text-rose-950 font-bold block mb-1">✕ Connection / Boot Error detected:</strong>
+                                              {diagError}
+                                            </div>
+                                          )}
+
+                                          {diagResults && (
+                                            <div className="space-y-3 mt-2 text-[11px] font-sans leading-relaxed text-slate-700">
+                                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                                                <strong className="text-[10px] uppercase font-mono font-black text-slate-500 tracking-wider block">Server Secrets Check</strong>
+                                                <div className="grid grid-cols-2 gap-3 font-mono text-[10px]">
+                                                  <div className="p-2 bg-white rounded border border-slate-100">
+                                                    <span className="text-slate-400 block text-[9px] uppercase">CLIENT_ID</span>
+                                                    <span className={`font-bold ${diagResults.environment?.WORDPRESS_CLIENT_ID?.configured ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                      {diagResults.environment?.WORDPRESS_CLIENT_ID?.configured ? '✓ Found' : 'Missing'}
+                                                    </span>
+                                                    <span className="block text-[9px] text-slate-500 mt-0.5">Masked: {diagResults.environment?.WORDPRESS_CLIENT_ID?.masked}</span>
+                                                    {diagResults.environment?.WORDPRESS_CLIENT_ID?.hasSpaces && (
+                                                      <span className="block text-amber-600 font-bold text-[8px] uppercase mt-0.5 animate-pulse">Contains spaces!</span>
+                                                    )}
+                                                  </div>
+                                                  <div className="p-2 bg-white rounded border border-slate-100">
+                                                    <span className="text-slate-400 block text-[9px] uppercase">CLIENT_SECRET</span>
+                                                    <span className={`font-bold ${diagResults.environment?.WORDPRESS_CLIENT_SECRET?.configured ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                      {diagResults.environment?.WORDPRESS_CLIENT_SECRET?.configured ? '✓ Found' : 'Missing'}
+                                                    </span>
+                                                    <span className="block text-[9px] text-slate-500 mt-0.5">Masked: {diagResults.environment?.WORDPRESS_CLIENT_SECRET?.masked}</span>
+                                                    {diagResults.environment?.WORDPRESS_CLIENT_SECRET?.hasSpaces && (
+                                                      <span className="block text-amber-600 font-bold text-[8px] uppercase mt-0.5 animate-pulse">Contains spaces!</span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 font-mono text-[10px]">
+                                                <strong className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Environment telemetry</strong>
+                                                <div className="flex justify-between border-b border-white pb-1 pb-1">
+                                                  <span>Vercel Platform:</span>
+                                                  <span className="font-bold text-slate-900">{diagResults.environment?.VERCEL ? "Yes" : "No"}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-white pb-1">
+                                                  <span>Active Host:</span>
+                                                  <span className="font-bold text-slate-900 truncate max-w-[150px]">{diagResults.activeRequest?.host || "N/A"}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                  <span>Forwarded Protocol:</span>
+                                                  <span className="font-bold text-slate-900">{diagResults.activeRequest?.xForwardedProto || "N/A"}</span>
+                                                </div>
+                                              </div>
+
+                                              {/* sliding attempts log viewer */}
+                                              <div className="space-y-1.5">
+                                                <strong className="text-[10px] uppercase font-mono font-black text-slate-500 tracking-wider block">Flow Attempt Logs (Sliding Window Logging)</strong>
+                                                {diagResults.lastOauthAttempts?.length === 0 ? (
+                                                  <div className="text-[10px] text-slate-400 p-2 border border-dashed border-slate-200 rounded text-center font-mono">
+                                                    No OAuth attempts logged yet on this restart cycle.
+                                                  </div>
+                                                ) : (
+                                                  <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                                                    {diagResults.lastOauthAttempts.map((attempt: any, idx: number) => (
+                                                      <div key={idx} className="p-2 border border-slate-150 rounded bg-indigo-50/25 text-[9px] font-mono space-y-1 leading-normal">
+                                                        <div className="flex justify-between text-slate-450 text-[8px]">
+                                                          <span>{new Date(attempt.timestamp).toLocaleTimeString()}</span>
+                                                          <span className="text-indigo-600 uppercase font-black">Link Constructed</span>
+                                                        </div>
+                                                        <div className="truncate text-slate-700">
+                                                          <span className="text-slate-400">client_id:</span> {attempt.clientIdMasked}
+                                                        </div>
+                                                        <div className="truncate text-red-600 font-bold">
+                                                          <span className="text-slate-400 font-normal">redirect_uri:</span> {attempt.computedRedirectUri}
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
 
                                         <div className="p-3.5 bg-amber-50/70 border border-amber-100 rounded-xl space-y-2">
