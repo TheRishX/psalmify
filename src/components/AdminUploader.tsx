@@ -15,7 +15,9 @@ interface AdminUploaderProps {
 
 export default function AdminUploader({ playlists, songs, onRefreshData }: AdminUploaderProps) {
   // Session Authentication state
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('isAdminLoggedIn') === 'true';
+  });
   const [adminPassword, setAdminPassword] = useState('');
   const [adminLoginError, setAdminLoginError] = useState('');
 
@@ -34,9 +36,20 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
   // Simulated WordPress Integration credentials
   const [wpUsername, setWpUsername] = useState('admin');
   const [wpPassword, setWpPassword] = useState('admin123');
-  const [wpToken, setWpToken] = useState<string>('');
-  const [wpTokenExpiry, setWpTokenExpiry] = useState<number>(0);
-  const [wpTokenTimeLeft, setWpTokenTimeLeft] = useState<number>(0);
+  const [wpToken, setWpToken] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('wpToken')) || '';
+  });
+  const [wpTokenExpiry, setWpTokenExpiry] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    const expires = localStorage.getItem('wpTokenExpiry');
+    return expires ? parseInt(expires, 10) : 0;
+  });
+  const [wpTokenTimeLeft, setWpTokenTimeLeft] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    const expires = localStorage.getItem('wpTokenExpiry');
+    if (!expires) return 0;
+    return Math.max(0, Math.round((parseInt(expires, 10) - Date.now()) / 1000));
+  });
   const [wpIsAuthenticating, setWpIsAuthenticating] = useState(false);
   const [wpAuthError, setWpAuthError] = useState('');
 
@@ -54,10 +67,32 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
   const [localSaveStatus, setLocalSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
   // Real WordPress OAuth 2.0 States
-  const [isRealWP, setIsRealWP] = useState(false);
-  const [wpBlogId, setWpBlogId] = useState('');
-  const [wpBlogUrl, setWpBlogUrl] = useState('psalmify.wordpress.com');
-  const [wpMode, setWpMode] = useState<'live' | 'simulated'>('live');
+  const [isRealWP, setIsRealWP] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('isRealWP') === 'true';
+  });
+  const [wpBlogId, setWpBlogId] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('wpBlogId')) || '';
+  });
+  const [wpBlogUrl, setWpBlogUrl] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('wpBlogUrl')) || 'psalmify.wordpress.com';
+  });
+  const [wpMode, setWpMode] = useState<'live' | 'simulated'>(() => {
+    return (typeof window !== 'undefined' && (localStorage.getItem('wpMode') as 'live' | 'simulated')) || 'live';
+  });
+
+  // Track state changes and keep localStorage updated
+  useEffect(() => {
+    localStorage.setItem('isAdminLoggedIn', isAdminLoggedIn ? 'true' : 'false');
+  }, [isAdminLoggedIn]);
+
+  useEffect(() => {
+    localStorage.setItem('wpToken', wpToken);
+    localStorage.setItem('wpTokenExpiry', String(wpTokenExpiry));
+    localStorage.setItem('isRealWP', isRealWP ? 'true' : 'false');
+    localStorage.setItem('wpBlogId', wpBlogId);
+    localStorage.setItem('wpBlogUrl', wpBlogUrl);
+    localStorage.setItem('wpMode', wpMode);
+  }, [wpToken, wpTokenExpiry, isRealWP, wpBlogId, wpBlogUrl, wpMode]);
 
   // Listen to OAuth success events from popup
   useEffect(() => {
