@@ -1,0 +1,33 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user is the designated admin
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'therishx@gmail.com' ||
+        request.auth.token.email == 'therishx@gmail.com'
+      );
+    }
+
+    // Songs collection
+    match /songs/{songId} {
+      allow read: if true; // anyone can search or read lyrics
+      allow create: if isAuthenticated(); // any registered user can submit a pending lyric
+      allow update, delete: if isAdmin(); // only admin can edit, approve, or delete lyrics
+    }
+
+    // Playlists collection
+    match /playlists/{playlistId} {
+      allow read: if true; // anyone can read playlists
+      allow create: if isAuthenticated(); // any registered user can create a playlist (pending)
+      allow update, delete: if isAdmin(); // only admin can modify or delete playlists
+    }
+  }
+}

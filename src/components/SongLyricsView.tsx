@@ -569,81 +569,27 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-[#fafafa] overflow-y-auto px-4 py-8 md:p-12 custom-scrollbar text-slate-800"
+            className="fixed inset-0 z-50 bg-[#fafafa] overflow-y-auto px-6 py-12 md:p-16 custom-scrollbar text-slate-800"
             id="fullscreen-lyrics-overlay"
           >
-            <div className="max-w-4xl mx-auto space-y-8 pb-32">
-              
-              {/* Floating Exit Controller Header */}
-              <div className="sticky top-0 z-10 bg-[#fafafa]/90 backdrop-blur-md border-b border-slate-200/80 py-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight text-slate-900">{song.title}</h2>
-                  <p className="text-xs font-mono text-slate-400">Theater Sing-Along Active • {song.artist}</p>
-                </div>
+            {/* Top-Right Exit Icon Only */}
+            <button
+              onClick={() => setIsFullScreen(false)}
+              className="fixed top-6 right-6 z-50 p-2.5 bg-white border border-slate-200 text-rose-500 hover:text-rose-600 transition hover:bg-slate-50 rounded-xl shadow-sm cursor-pointer"
+              title="Remove Fullscreen"
+              id="exit-fullscreen-btn"
+            >
+              <Minimize2 className="w-5 h-5" />
+            </button>
 
-                <div className="flex items-center gap-2">
-                  {/* Font Adjusters in Fullscreen */}
-                  <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 p-1 rounded-lg">
-                    <button
-                      onClick={decreaseFontSize}
-                      className="p-1 rounded text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition"
-                      title="Smaller Lyrics Font"
-                    >
-                      <ZoomOut className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs font-mono font-bold px-2 text-slate-700">
-                      {lyricFontSize}px
-                    </span>
-                    <button
-                      onClick={increaseFontSize}
-                      className="p-1 rounded text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition"
-                      title="Larger Lyrics Font"
-                    >
-                      <ZoomIn className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Playback trigger in Fullscreen */}
-                  <button
-                    onClick={() => setIsPlaying(!isPlaying)}
-                    className={`p-2 rounded-lg font-mono font-bold text-xs flex items-center gap-1.5 transition ${
-                      isPlaying ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-slate-900 text-white'
-                    }`}
-                  >
-                    {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                    <span>{isPlaying ? 'Pause' : 'Play Tracker'}</span>
-                  </button>
-
-                  <button
-                    onClick={resetPlayback}
-                    className="p-2 bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 rounded-lg transition"
-                    title="Reset playback"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Exit Fullscreen Mode */}
-                  <button
-                    onClick={() => setIsFullScreen(false)}
-                    className="p-2 bg-red-100 hover:bg-red-200 border border-red-200 text-red-700 rounded-lg text-xs font-bold flex items-center gap-1 font-mono transition cursor-pointer"
-                  >
-                    <Minimize2 className="w-4 h-4" />
-                    <span>Exit Fullscreen</span>
-                  </button>
-                </div>
+            <div className="max-w-3xl mx-auto space-y-12 pb-32 pt-8">
+              {/* Immersive Title */}
+              <div className="text-center space-y-2 border-b border-slate-100 pb-8">
+                <h1 className="text-3xl font-serif font-black tracking-tight text-slate-900">{song.title}</h1>
+                <p className="text-xs uppercase font-mono tracking-wider text-slate-400">By {song.artist}</p>
               </div>
 
-              {/* Progress and status in Fullscreen */}
-              <div className="bg-white border border-slate-250/60 rounded-xl p-4 flex items-center justify-between text-xs font-mono text-slate-500 shadow-sm">
-                <span className="flex items-center gap-1.5 text-rose-600 font-bold">
-                  <span className={`w-2 h-2 rounded-full bg-rose-500 ${isPlaying ? 'animate-ping' : ''}`} />
-                  Playback: {formatSeconds(currentTime)} / {formatSeconds(totalSeconds)}
-                </span>
-                <span>Active Verse Block: {activeSectionIndex !== -1 ? song.formattedLyrics[activeSectionIndex]?.label : 'Intro/Listening'}</span>
-                <span>Press &apos;Esc&apos; or click Exit to return to dashboard view</span>
-              </div>
-
-              {/* Giant Readable Lyrics for Projection or Theater Sight */}
+              {/* Readable Lyrics Blocks */}
               <div className="space-y-8 pt-4">
                 {song.formattedLyrics.map((section, sIdx) => {
                   const isChorus = section.type === 'chorus';
@@ -652,8 +598,8 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                   const isSectionActive = activeSectionIndex === sIdx;
 
                   let containerStyles = "p-8 rounded-2xl border transition-all duration-300 ";
-                  let headerStyles = "text-xs font-mono font-bold uppercase tracking-wider mb-4 block ";
-                  let lineStyles = "leading-relaxed tracking-wider transition-all duration-200 ";
+                  let headerStyles = "text-[10px] font-mono font-bold uppercase tracking-wider mb-4 block ";
+                  let lineStyles = "leading-loose tracking-wider transition-all duration-200 ";
 
                   if (isChorus) {
                     containerStyles += isSectionActive 
@@ -697,7 +643,7 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                           return (
                             <p 
                               key={lIdx}
-                              style={{ fontSize: `${lyricFontSize + 4}px` }} // Giant readable size in full-screen
+                              style={{ fontSize: `${lyricFontSize + 4}px` }} 
                               className={`${lineStyles} ${
                                 isLineActive 
                                   ? 'text-amber-900 bg-amber-100 px-3 py-1.5 rounded-xl border-l-4 border-l-amber-600 scale-[1.01] font-bold shadow-sm' 
@@ -713,7 +659,6 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                   );
                 })}
               </div>
-
             </div>
           </motion.div>
         )}

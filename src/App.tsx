@@ -3,9 +3,17 @@ import { Song, Playlist } from './types';
 import PlaylistListView from './components/PlaylistListView';
 import SongLyricsView from './components/SongLyricsView';
 import AdminUploader from './components/AdminUploader';
+import { auth, db, googleProvider } from './utils/firebase';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { collection, query, where, onSnapshot, getDocs, setDoc, doc, limit } from 'firebase/firestore';
+import { parseRawLyrics } from './utils/lyricParser';
+import { DEFAULT_SONGS, DEFAULT_PLAYLISTS } from './data/defaultData';
+import { SubmitSongForm, SubmitPlaylistForm } from './components/SubmissionForms';
 import { 
   Music, Eye, Search, Sparkles, Sliders, Headphones, 
-  Flame, CheckCircle, Disc, Info, ChevronRight, HelpCircle
+  Flame, CheckCircle, Disc, Info, ChevronRight, HelpCircle,
+  PlusCircle, User, LogOut, ArrowRight, ShieldAlert, BadgeInfo,
+  Calendar, Layers, CheckCircle2, ChevronDown, ListPlus, X, ShieldAlert as AdminIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -19,6 +27,14 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
+
+  // Authentication State
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Community Submissions Modal Trigger State
+  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
+  const [submissionType, setSubmissionType] = useState<'song' | 'playlist'>('song');
 
   // Monitor location path name to handle url changes (/admin and back)
   useEffect(() => {
@@ -57,27 +73,150 @@ export default function App() {
     window.dispatchEvent(new Event('popstate'));
   };
 
-  // Fetch songs and playlists from fullstack database Express endpoints
-  const loadData = async () => {
-    try {
-      const songsRes = await fetch('/api/songs');
-      const playlistsRes = await fetch('/api/playlists');
-      if (songsRes.ok && playlistsRes.ok) {
-        const sData = await songsRes.json();
-        const pData = await playlistsRes.json();
-        setSongs(sData);
-        setPlaylists(pData);
+  // Listen to Auth State changes on mount
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync state with cloud database + Seeder trigger on empty Firestore instance
+  useEffect(() => {
+    const checkAndSeed = async () => {
+      try {
+        const q = query(collection(db, "songs"), limit(1));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          console.log("Firestore collection empty. Initializing automatic database seed...");
+          
+          for (const s of DEFAULT_SONGS) {
+            const parsed = parseRawLyrics(s.rawLyrics);
+            await setDoc(doc(db, "songs", s.id), {
+              ...s,
+              formattedLyrics: parsed,
+              status: 'approved',
+              submittedBy: 'system',
+              submittedByName: 'System Seed',
+              createdAt: new Date().toISOString()
+            });
+          }
+
+          for (const p of DEFAULT_PLAYLISTS) {
+            await setDoc(doc(db, "playlists", p.id), {
+              ...p,
+              status: 'approved',
+              submittedBy: 'system',
+              submittedByName: 'System Seed',
+              createdAt: new Date().toISOString()
+            });
+          }
+          console.log("Seeding process succeeded flawlessly.");
+        }
+      } catch (err) {
+        console.error("Critical Firestore seed error:", err);
       }
+    };
+
+    checkAndSeed().then(() => {
+      // Listen to songs real-time snapshot (extracting approved catalog)
+      const qSongs = query(collection(db, "songs"), where("status", "==", "approved"));
+      const unsubSongs = onSnapshot(qSongs, (snapshot) => {
+        const list: Song[] = [];
+        snapshot.forEach(docSnap => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as Song);
+        });
+        setSongs(list);
+        setLoading(false);
+      }, (error) => {
+        console.error("Error active songs snapshot:", error);
+        setLoading(false);
+      });
+
+      // Listen to playlists real-time snapshot (extracting approved playlists)
+      const qPlaylists = query(collection(db, "playlists"), where("status", "==", "approved"));
+      const unsubPlaylists = onSnapshot(qPlaylists, (snapshot) => {
+        const list: Playlist[] = [];
+        snapshot.forEach(docSnap => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as Playlist);
+        });
+        setPlaylists(list);
+      }, (error) => {
+        console.error("Error active playlists snapshot:", error);
+      });
+
+      return () => {
+        unsubSongs();
+        unsubPlaylists();
+      };
+    });
+  }, []);
+
+  // Manual fallback reload trigger
+  const triggerReloadData = async () => {
+    setLoading(true);
+    try {
+      const snapSongs = await getDocs(query(collection(db, "songs"), where("status", "==", "approved")));
+      const snapPlaylists = await getDocs(query(collection(db, "playlists"), where("status", "==", "approved")));
+      
+      const sList: Song[] = [];
+      snapSongs.forEach(docSnap => {
+        sList.push({ id: docSnap.id, ...docSnap.data() } as Song);
+      });
+      setSongs(sList);
+
+      const pList: Playlist[] = [];
+      snapPlaylists.forEach(docSnap => {
+        pList.push({ id: docSnap.id, ...docSnap.data() } as Playlist);
+      });
+      setPlaylists(pList);
+
     } catch (err) {
-      console.error('Error synchronizing database content state:', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Google Sign-In helper method
+  const handleGoogleSignIn = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      return result.user;
+    } catch (err: any) {
+      console.error("Popup authentication rejected:", err?.message);
+      alert("Authentication Handshake Failed: " + (err?.message || "Verify your connection or project setup in Google Cloud Console."));
+      return null;
+    }
+  };
+
+  // Unified submission launcher guard
+  const triggerSubmission = (type: 'song' | 'playlist') => {
+    if (!user) {
+      handleGoogleSignIn().then((loggedInUser) => {
+        if (loggedInUser) {
+          setSubmissionType(type);
+          setIsSubmissionModalOpen(true);
+        }
+      });
+    } else {
+      setSubmissionType(type);
+      setIsSubmissionModalOpen(true);
+    }
+  };
+
+  const handleAdminWorkspaceClick = () => {
+    if (!user) {
+      handleGoogleSignIn().then((loggedInUser) => {
+        if (loggedInUser) {
+          navigateTo('admin');
+        }
+      });
+    } else {
+      navigateTo('admin');
+    }
+  };
 
   // Compute genre filter checklist dynamically
   const genresList = React.useMemo(() => {
@@ -111,6 +250,8 @@ export default function App() {
     }, 100);
   };
 
+  const isAdmin = user?.email === 'therishx@gmail.com';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-rose-100 selection:text-rose-900" id="root-viewport">
       
@@ -136,20 +277,80 @@ export default function App() {
             </div>
           </div>
 
-          {/* Minimal Status or back buttons based on routing */}
-          <div>
+          {/* User Sign-In block / Admin panel navigation */}
+          <div className="flex items-center gap-3.5">
+            {authLoading ? (
+              <span className="w-4 h-4 rounded-full border-2 border-slate-100 border-t-slate-800 animate-spin" />
+            ) : user ? (
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-1.5 pr-3">
+                <div className="w-7 h-7 rounded-lg overflow-hidden border border-slate-200 flex-shrink-0">
+                  {user.photoURL ? (
+                    <img 
+                      referrerPolicy="no-referrer"
+                      src={user.photoURL} 
+                      alt="" 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <div className="w-[100%] h-100 bg-rose-500 text-white flex items-center justify-center text-xs font-bold uppercase font-mono">
+                      {user.email[0]}
+                    </div>
+                  )}
+                </div>
+                <div className="hidden sm:block text-left leading-none">
+                  <span className="text-[10px] font-bold text-slate-900 flex items-center gap-1 leading-none">
+                    {user.displayName || user.email.split('@')[0]}
+                    {isAdmin && (
+                      <span className="text-[8px] bg-emerald-500 text-slate-950 font-extrabold font-mono px-1 rounded uppercase">
+                        Admin
+                      </span>
+                    )}
+                  </span>
+                  <p className="text-[8px] font-mono text-slate-400 mt-1 leading-none">{user.email}</p>
+                </div>
+
+                <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
+
+                <button
+                  onClick={() => signOut(auth)}
+                  className="p-1 text-slate-400 hover:text-red-650 transition cursor-pointer"
+                  title="Disconnect Workspace Session"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleGoogleSignIn}
+                className="py-1.5 px-3.5 bg-slate-900 border border-slate-950 hover:bg-slate-850 text-white rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition cursor-pointer shadow-sm active:scale-[0.99]"
+              >
+                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                </svg>
+                <span>Google Sign-In</span>
+              </button>
+            )}
+
             {activeTab === 'admin' ? (
               <button
                 onClick={() => navigateTo('explore')}
-                className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+                className="px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 bg-white border border-slate-205 hover:bg-slate-50 transition-all cursor-pointer shadow-xs"
               >
-                ← Back to Catalog
+                ← Public Catalogue
               </button>
             ) : (
-              <span className="text-[10px] items-center font-mono text-slate-400 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-full uppercase hidden sm:flex gap-1.5">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                {songs.length} Tracks Live
-              </span>
+              isAdmin && (
+                <button
+                  onClick={() => navigateTo('admin')}
+                  className="px-3.5 py-2 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shadow-xs"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                  <span>Admin Panel</span>
+                </button>
+              )
             )}
           </div>
         </div>
@@ -160,7 +361,7 @@ export default function App() {
         {loading ? (
           <div className="text-center py-24 font-mono text-xs text-slate-400 space-y-3 flex flex-col items-center">
             <Disc className="w-6 h-6 text-rose-500 animate-spin" />
-            <span>Loading lyrics repository...</span>
+            <span>Connecting to Cloud Realtime Firestore...</span>
           </div>
         ) : (
           <AnimatePresence mode="wait">
@@ -174,6 +375,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-8 animate-fade-in"
               >
+                
                 {/* ACTIVE SONG LYRICS DISPLAY PANEL */}
                 {activeSongId && (
                   <motion.div
@@ -199,6 +401,40 @@ export default function App() {
                   </motion.div>
                 )}
 
+                {/* Community Submissions Callout banner */}
+                <div className="bg-gradient-to-r from-rose-500/8 to-indigo-500/8 border border-rose-150 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs relative overflow-hidden">
+                  <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-rose-500/5 filter blur-2xl" />
+                  <div className="absolute -bottom-12 -left-12 w-32 h-32 rounded-full bg-indigo-500/5 filter blur-2xl" />
+                  
+                  <div className="space-y-1.5 min-w-0 flex-grow text-center md:text-left">
+                    <div className="flex items-center gap-2 justify-center md:justify-start">
+                      <Sparkles className="w-4 h-4 text-rose-500 animate-pulse" />
+                      <span className="text-[10px] font-mono tracking-widest text-rose-600 font-bold uppercase">Community Hymnal Desk</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Share Your Favorite Worship Lyrics</h3>
+                    <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
+                      Submit new worship tracks or curated themed compilations. All proposals go instantly to review before posting live!
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 flex-wrap justify-center flex-shrink-0">
+                    <button
+                      onClick={() => triggerSubmission('song')}
+                      className="py-2.5 px-4 bg-slate-900 border border-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer active:scale-98 shadow-sm"
+                    >
+                      <PlusCircle className="w-4 h-4 text-emerald-400" />
+                      <span>Submit Track Lyrics</span>
+                    </button>
+                    <button
+                      onClick={() => triggerSubmission('playlist')}
+                      className="py-2.5 px-4 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer active:scale-98 shadow-sm"
+                    >
+                      <ListPlus className="w-4 h-4 text-rose-500" />
+                      <span>Propose Playlist Theme</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* BROWSE CATALOUGE LISTS GRID */}
                 <div id="browse-lyrics-directory" className="space-y-6">
                   
@@ -211,7 +447,7 @@ export default function App() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search song titles, artists, or specific lyrics stanzas..."
-                        className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-800 font-mono placeholder:text-slate-400/90 transition-all"
+                        className="w-full bg-slate-50 border border-slate-200/80 focus:border-slate-400 focus:bg-white outline-none rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-805 font-mono placeholder:text-slate-400/90 transition-all"
                       />
                     </div>
 
@@ -240,8 +476,8 @@ export default function App() {
                       <span>Select a track to view synced lyrics</span>
                     </div>
 
-                     {filteredSongs.length === 0 ? (
-                      <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl text-xs text-slate-500 font-mono space-y-2">
+                    {filteredSongs.length === 0 ? (
+                      <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl text-xs text-slate-500 font-mono space-y-2 relative">
                         <p className="font-bold">No tracks match your search queries.</p>
                         <p className="text-slate-400">Try testing different keywords or clear your active genre filters.</p>
                       </div>
@@ -265,7 +501,7 @@ export default function App() {
                               <div className="flex items-center gap-3">
                                 
                                 {/* Track Cover Mini */}
-                                <div className="w-11 h-11 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex-shrink-0">
+                                <div className="w-11 h-11 rounded-lg bg-slate-100 overflow-hidden border border-slate-150 flex-shrink-0">
                                   <img
                                     referrerPolicy="no-referrer"
                                     src={song.coverUrl || 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600&auto=format&fit=crop'}
@@ -276,10 +512,10 @@ export default function App() {
 
                                 <div className="flex-grow min-w-0">
                                   <div className="flex justify-between items-start gap-2">
-                                    <h4 className="font-bold text-sm text-slate-900 truncate hover:text-rose-600 font-sans transition-colors">
+                                    <h4 className="font-bold text-sm text-slate-905 truncate hover:text-rose-650 font-sans transition-colors">
                                       {song.title}
                                     </h4>
-                                    <span className="text-[9px] bg-slate-100 font-mono text-slate-500 px-1.5 py-0.5 rounded uppercase border border-slate-200">
+                                    <span className="text-[9px] bg-slate-100 font-mono text-slate-550 px-1.5 py-0.5 rounded uppercase border border-slate-200">
                                       {song.genre}
                                     </span>
                                   </div>
@@ -289,7 +525,7 @@ export default function App() {
 
                               <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-slate-100 pt-3 mt-3">
                                 <span className="flex items-center gap-1.5">
-                                  <Flame className="w-3.5 h-3.5 text-orange-500" />
+                                  <Flame className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
                                   Ready to view
                                 </span>
                                 <div className="flex items-center gap-2">
@@ -298,8 +534,8 @@ export default function App() {
                                       MEDIA
                                     </span>
                                   )}
-                                  <span className="text-slate-600 font-bold flex items-center gap-0.5">
-                                    Open lyrics <ChevronRight className="w-3 h-3" />
+                                  <span className="text-slate-700 font-bold flex items-center gap-0.5">
+                                    Open lyrics <ChevronRight className="w-3 h-3 text-slate-500" />
                                   </span>
                                 </div>
                               </div>
@@ -332,7 +568,8 @@ export default function App() {
                 <AdminUploader
                   playlists={playlists}
                   songs={songs}
-                  onRefreshData={loadData}
+                  onRefreshData={triggerReloadData}
+                  user={user}
                 />
               </motion.div>
             )}
@@ -347,19 +584,72 @@ export default function App() {
           <p className="tracking-wide text-slate-500 uppercase font-bold text-[11px]">
             Psalmify • Minimal Hymn & Lyric Directory
           </p>
-          <p className="text-[10px] text-slate-400 max-w-lg mx-auto leading-relaxed">
+          <p className="text-[10px] text-slate-405 max-w-lg mx-auto leading-relaxed">
             Beautifully structured typography rendering engine with responsive scaling control and quick WordPress publish capabilities.
           </p>
           <div className="pt-2">
             <button
-              onClick={() => navigateTo('admin')}
-              className="text-[10px] text-slate-400 hover:text-rose-500 hover:underline transition-colors cursor-pointer border-none bg-none outline-none"
+              onClick={handleAdminWorkspaceClick}
+              className="text-[10px] text-slate-400 hover:text-rose-500 hover:underline transition-colors cursor-pointer border-none bg-none outline-none font-bold"
             >
               Access Admin Workspace
             </button>
           </div>
         </div>
       </footer>
+
+      {/* MODAL FOR USER LYRICS / PLAYLIST SUBMISSIONS */}
+      <AnimatePresence>
+        {isSubmissionModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSubmissionModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs"
+            />
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 max-w-2xl w-full shadow-xl relative z-10"
+              id="user-proposal-modal-card"
+            >
+              <button
+                onClick={() => setIsSubmissionModalOpen(false)}
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {submissionType === 'song' ? (
+                <SubmitSongForm
+                  user={user}
+                  onClose={() => setIsSubmissionModalOpen(false)}
+                  onSuccess={() => {
+                    setIsSubmissionModalOpen(false);
+                    alert("Track lyrics submitted for moderation successfully! Thank you for your contribution!");
+                  }}
+                />
+              ) : (
+                <SubmitPlaylistForm
+                  user={user}
+                  songs={songs}
+                  onClose={() => setIsSubmissionModalOpen(false)}
+                  onSuccess={() => {
+                    setIsSubmissionModalOpen(false);
+                    alert("Playlist proposal submitted for review successfully! Perfect suggestion!");
+                  }}
+                />
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
