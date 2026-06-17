@@ -3,7 +3,7 @@ import { Song, Playlist } from './types';
 import PlaylistListView from './components/PlaylistListView';
 import SongLyricsView from './components/SongLyricsView';
 import AdminUploader from './components/AdminUploader';
-import { auth, db, googleProvider } from './utils/firebase';
+import { auth, db, googleProvider, OperationType, handleFirestoreError } from './utils/firebase';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, getDocs, setDoc, doc, limit } from 'firebase/firestore';
 import { parseRawLyrics } from './utils/lyricParser';
@@ -82,35 +82,80 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Sync state with cloud database + Seeder trigger on empty Firestore instance
+  // Real-time snapshot synchronized listeners
   useEffect(() => {
+    // Listen to songs real-time snapshot (extracting approved catalog)
+    const qSongs = query(collection(db, "songs"), where("status", "==", "approved"));
+    const unsubSongs = onSnapshot(qSongs, (snapshot) => {
+      const list: Song[] = [];
+      snapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Song);
+      });
+      setSongs(list);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "songs");
+    });
+
+    // Listen to playlists real-time snapshot (extracting approved playlists)
+    const qPlaylists = query(collection(db, "playlists"), where("status", "==", "approved"));
+    const unsubPlaylists = onSnapshot(qPlaylists, (snapshot) => {
+      const list: Playlist[] = [];
+      snapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Playlist);
+      });
+      setPlaylists(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "playlists");
+    });
+
+    return () => {
+      unsubSongs();
+      unsubPlaylists();
+    };
+  }, []);
+
+  // Seeder trigger on empty Firestore instance: only runs if a user is authenticated (to permit writes)
+  useEffect(() => {
+    if (!user) return;
+
     const checkAndSeed = async () => {
       try {
         const q = query(collection(db, "songs"), limit(1));
-        const snap = await getDocs(q);
-        if (snap.empty) {
+        const snap = await getDocs(q).catch((error) => {
+          handleFirestoreError(error, OperationType.GET, "songs");
+        });
+        if (snap && snap.empty) {
           console.log("Firestore collection empty. Initializing automatic database seed...");
           
           for (const s of DEFAULT_SONGS) {
             const parsed = parseRawLyrics(s.rawLyrics);
-            await setDoc(doc(db, "songs", s.id), {
-              ...s,
-              formattedLyrics: parsed,
-              status: 'approved',
-              submittedBy: 'system',
-              submittedByName: 'System Seed',
-              createdAt: new Date().toISOString()
-            });
+            try {
+              await setDoc(doc(db, "songs", s.id), {
+                ...s,
+                formattedLyrics: parsed,
+                status: 'approved',
+                submittedBy: 'system',
+                submittedByName: 'System Seed',
+                createdAt: new Date().toISOString()
+              });
+            } catch (error) {
+              handleFirestoreError(error, OperationType.CREATE, `songs/${s.id}`);
+            }
           }
 
           for (const p of DEFAULT_PLAYLISTS) {
-            await setDoc(doc(db, "playlists", p.id), {
-              ...p,
-              status: 'approved',
-              submittedBy: 'system',
-              submittedByName: 'System Seed',
-              createdAt: new Date().toISOString()
-            });
+            try {
+              await setDoc(doc(db, "playlists", p.id), {
+                ...p,
+                status: 'approved',
+                submittedBy: 'system',
+                submittedByName: 'System Seed',
+                createdAt: new Date().toISOString()
+              });
+            } catch (error) {
+              handleFirestoreError(error, OperationType.CREATE, `playlists/${p.id}`);
+            }
           }
           console.log("Seeding process succeeded flawlessly.");
         }
@@ -119,57 +164,34 @@ export default function App() {
       }
     };
 
-    checkAndSeed().then(() => {
-      // Listen to songs real-time snapshot (extracting approved catalog)
-      const qSongs = query(collection(db, "songs"), where("status", "==", "approved"));
-      const unsubSongs = onSnapshot(qSongs, (snapshot) => {
-        const list: Song[] = [];
-        snapshot.forEach(docSnap => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as Song);
-        });
-        setSongs(list);
-        setLoading(false);
-      }, (error) => {
-        console.error("Error active songs snapshot:", error);
-        setLoading(false);
-      });
-
-      // Listen to playlists real-time snapshot (extracting approved playlists)
-      const qPlaylists = query(collection(db, "playlists"), where("status", "==", "approved"));
-      const unsubPlaylists = onSnapshot(qPlaylists, (snapshot) => {
-        const list: Playlist[] = [];
-        snapshot.forEach(docSnap => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as Playlist);
-        });
-        setPlaylists(list);
-      }, (error) => {
-        console.error("Error active playlists snapshot:", error);
-      });
-
-      return () => {
-        unsubSongs();
-        unsubPlaylists();
-      };
-    });
-  }, []);
+    checkAndSeed();
+  }, [user]);
 
   // Manual fallback reload trigger
   const triggerReloadData = async () => {
     setLoading(true);
     try {
-      const snapSongs = await getDocs(query(collection(db, "songs"), where("status", "==", "approved")));
-      const snapPlaylists = await getDocs(query(collection(db, "playlists"), where("status", "==", "approved")));
+      const snapSongs = await getDocs(query(collection(db, "songs"), where("status", "==", "approved"))).catch((error) => {
+        handleFirestoreError(error, OperationType.LIST, "songs");
+      });
+      const snapPlaylists = await getDocs(query(collection(db, "playlists"), where("status", "==", "approved"))).catch((error) => {
+        handleFirestoreError(error, OperationType.LIST, "playlists");
+      });
       
       const sList: Song[] = [];
-      snapSongs.forEach(docSnap => {
-        sList.push({ id: docSnap.id, ...docSnap.data() } as Song);
-      });
+      if (snapSongs) {
+        snapSongs.forEach(docSnap => {
+          sList.push({ id: docSnap.id, ...docSnap.data() } as Song);
+        });
+      }
       setSongs(sList);
 
       const pList: Playlist[] = [];
-      snapPlaylists.forEach(docSnap => {
-        pList.push({ id: docSnap.id, ...docSnap.data() } as Playlist);
-      });
+      if (snapPlaylists) {
+        snapPlaylists.forEach(docSnap => {
+          pList.push({ id: docSnap.id, ...docSnap.data() } as Playlist);
+        });
+      }
       setPlaylists(pList);
 
     } catch (err) {

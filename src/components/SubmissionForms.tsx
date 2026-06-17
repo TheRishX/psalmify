@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { db } from '../utils/firebase';
+import { db, OperationType, handleFirestoreError } from '../utils/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { parseRawLyrics } from '../utils/lyricParser';
 import { 
@@ -57,6 +57,8 @@ export function SubmitSongForm({ user, onClose, onSuccess }: SubmitSongFormProps
         submittedBy: user.email,
         submittedByName: user.displayName || user.email.split('@')[0],
         createdAt: new Date().toISOString()
+      }).catch((error) => {
+        handleFirestoreError(error, OperationType.CREATE, "songs");
       });
 
       onSuccess();
@@ -264,6 +266,8 @@ export function SubmitPlaylistForm({ user, songs, onClose, onSuccess }: SubmitPl
         submittedBy: user.email,
         submittedByName: user.displayName || user.email.split('@')[0],
         createdAt: new Date().toISOString()
+      }).catch((error) => {
+        handleFirestoreError(error, OperationType.CREATE, "playlists");
       });
 
       onSuccess();

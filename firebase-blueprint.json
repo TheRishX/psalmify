@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "Song": {
+      "title": "Song",
+      "description": "A worship or praise track with raw and formatted lyrics.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "album": { "type": "string" },
+        "genre": { "type": "string" },
+        "duration": { "type": "string" },
+        "rawLyrics": { "type": "string" },
+        "formattedLyrics": { "type": "array" },
+        "coverUrl": { "type": "string" },
+        "youtubeUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved"] },
+        "submittedBy": { "type": "string" },
+        "submittedByName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "artist", "rawLyrics", "status", "submittedBy", "createdAt"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "A curated collection of lyric tracks.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "genre": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "songIds": { "type": "array" },
+        "status": { "type": "string", "enum": ["pending", "approved"] },
+        "submittedBy": { "type": "string" },
+        "submittedByName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "description", "status", "submittedBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/songs/{songId}": {
+      "schema": "Song",
+      "description": "Collection of worship songs."
+    },
+    "/playlists/{playlistId}": {
+      "schema": "Playlist",
+      "description": "Collection of curated themed song lists."
+    }
+  }
+}

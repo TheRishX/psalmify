@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Song, Playlist, FormattedSection } from '../types';
 import { parseRawLyrics, buildHTMLFromSections } from '../utils/lyricParser';
-import { db, auth } from '../utils/firebase';
+import { db, auth, OperationType, handleFirestoreError } from '../utils/firebase';
 import { 
   collection, doc, onSnapshot, updateDoc, deleteDoc, 
   addDoc, setDoc, query, where, getDocs 
@@ -95,6 +95,8 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user }:
       });
       setAllFirestoreSongs(list);
       setDbLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "songs");
     });
 
     // Listen to all playlists
@@ -105,6 +107,8 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user }:
       });
       list.sort((a, b) => b.createdAt?.localeCompare(a.createdAt || '') || 0);
       setAllFirestorePlaylists(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "playlists");
     });
 
     return () => {
