@@ -130,11 +130,22 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
         // Automatically fetch WordPress token to kickstart uploader convenience
         autoWPLogin();
       } else {
-        const d = await res.json();
-        setAdminLoginError(d.message || 'Verification failed.');
+        let msg = 'Verification failed.';
+        try {
+          const d = await res.json();
+          msg = d.message || msg;
+        } catch (jsonErr) {
+          try {
+            const rawText = await res.text();
+            msg = `[HTTP ${res.status}] ${rawText.substring(0, 120)}` || msg;
+          } catch (textErr) {
+            msg = `HTTP Error ${res.status}`;
+          }
+        }
+        setAdminLoginError(msg);
       }
-    } catch (err) {
-      setAdminLoginError('Server communication issue.');
+    } catch (err: any) {
+      setAdminLoginError(`Connection failed: ${err?.message || err || 'Check console.'}`);
     }
   };
 

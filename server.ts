@@ -3,8 +3,8 @@ import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import { DEFAULT_SONGS, DEFAULT_PLAYLISTS } from "./src/data/defaultData.js";
-import { parseRawLyrics } from "./src/utils/lyricParser.js";
+import { DEFAULT_SONGS, DEFAULT_PLAYLISTS } from "./src/data/defaultData";
+import { parseRawLyrics } from "./src/utils/lyricParser";
 import { GoogleGenAI } from "@google/genai";
 
 // Initialize environment variables
