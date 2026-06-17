@@ -174,7 +174,13 @@ function getGeminiClient(): GoogleGenAI | null {
 }
 
 const app = express();
-app.use(express.json());
+// Support pre-parsed bodies (Vercel serverless environment sometimes pre-parses req.body)
+app.use((req, res, next) => {
+  if (req.body !== undefined && req.body !== null && typeof req.body === "object") {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // Path correction middleware for Vercel Serverless environment
 app.use((req, res, next) => {
@@ -645,11 +651,17 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
 
   // Verify Single-Admin static credentials or token
   app.post("/api/admin/verify", (req, res) => {
-    const { password } = req.body;
-    if (password === "Jesus@9664808@") {
-      res.json({ success: true, token: "admin_dashboard_token_vibe" });
-    } else {
-      res.status(401).json({ success: false, message: "Invalid administrator password." });
+    try {
+      const body = req.body || {};
+      const { password } = body;
+      if (password === "Jesus@9664808@") {
+        res.json({ success: true, token: "admin_dashboard_token_vibe" });
+      } else {
+        res.status(401).json({ success: false, message: "Invalid administrator password." });
+      }
+    } catch (err: any) {
+      console.error("Admin verification handler caught exception:", err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });
 
