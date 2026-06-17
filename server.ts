@@ -472,7 +472,7 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
     const { username, password } = req.body;
     
     // Simulate simple WordPress Admin Login
-    if (username === "admin" && password === "admin123") {
+    if (username === "admin" && password === "Jesus@9664808@") {
       const simulatedToken = "wp_jwt_" + Math.random().toString(36).substring(2, 11).toUpperCase();
       // Set to expire in 120 seconds to allow showcasing "JWT Expired Fallback" state!
       const expiry = Date.now() + 120000; 
@@ -625,7 +625,7 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
   // Verify Single-Admin static credentials or token
   app.post("/api/admin/verify", (req, res) => {
     const { password } = req.body;
-    if (password === "admin123") {
+    if (password === "Jesus@9664808@") {
       res.json({ success: true, token: "admin_dashboard_token_vibe" });
     } else {
       res.status(401).json({ success: false, message: "Invalid administrator password." });
