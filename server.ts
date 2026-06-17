@@ -174,31 +174,27 @@ function getGeminiClient(): GoogleGenAI | null {
 }
 
 const app = express();
+
 // Support pre-parsed bodies (Vercel serverless environment sometimes pre-parses req.body)
+const jsonParser = express.json();
 app.use((req, res, next) => {
   if (req.body !== undefined && req.body !== null && typeof req.body === "object") {
     return next();
   }
-  express.json()(req, res, next);
+  jsonParser(req, res, next);
 });
 
 // Path correction middleware for Vercel Serverless environment
 app.use((req, res, next) => {
-  const matchedPath = req.headers["x-matched-path"];
   const originalUrlHeader = req.headers["x-original-url"];
+  const matchedPath = req.headers["x-matched-path"];
   
-  // If the URL already looks like a valid API path, let Express handle it naturally
-  if (req.url && req.url.startsWith("/api/")) {
-    return next();
-  }
-  
-  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api/")) {
-    // Preserve query parameters if they exist in req.url
+  if (originalUrlHeader && typeof originalUrlHeader === "string") {
+    req.url = originalUrlHeader;
+  } else if (matchedPath && typeof matchedPath === "string" && !matchedPath.endsWith("index") && !matchedPath.endsWith("index.ts") && !matchedPath.endsWith("index.js") && matchedPath.startsWith("/api/")) {
     const queryIndex = req.url.indexOf("?");
     const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
     req.url = matchedPath + query;
-  } else if (originalUrlHeader && typeof originalUrlHeader === "string") {
-    req.url = originalUrlHeader;
   }
   next();
 });
