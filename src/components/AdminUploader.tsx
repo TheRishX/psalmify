@@ -147,8 +147,12 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
         setIsAdminLoggedIn(true);
         // Automatically fetch Simulated WordPress Token
         autoWPLogin();
-      } else {
+      } else if (res.status === 404) {
+        setAdminLoginError('Server endpoint not found (404). Verification API route could not be reached.');
+      } else if (res.status === 401) {
         setAdminLoginError('Incorrect administrator passphrase. Access denied.');
+      } else {
+        setAdminLoginError(`Authentication failed with HTTP code ${res.status}.`);
       }
     } catch (err: any) {
       setAdminLoginError('Connection failed. Verify server response.');

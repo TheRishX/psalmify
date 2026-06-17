@@ -24,7 +24,15 @@ export default function App() {
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
-      if (path.startsWith('/admin')) {
+      const hash = window.location.hash;
+      const searchParams = new URLSearchParams(window.location.search);
+      
+      if (
+        path.startsWith('/admin') ||
+        hash.includes('admin') ||
+        searchParams.get('tab') === 'admin' ||
+        searchParams.get('admin') === 'true'
+      ) {
         setActiveTab('admin');
       } else {
         setActiveTab('explore');
@@ -35,11 +43,15 @@ export default function App() {
     handleLocationChange();
 
     window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, []);
 
   const navigateTo = (tab: 'explore' | 'admin') => {
-    const targetPath = tab === 'admin' ? '/admin' : '/';
+    const targetPath = tab === 'admin' ? '/?tab=admin#admin' : '/';
     window.history.pushState(null, '', targetPath);
     setActiveTab(tab);
     window.dispatchEvent(new Event('popstate'));
@@ -338,6 +350,14 @@ export default function App() {
           <p className="text-[10px] text-slate-400 max-w-lg mx-auto leading-relaxed">
             Beautifully structured typography rendering engine with responsive scaling control and quick WordPress publish capabilities.
           </p>
+          <div className="pt-2">
+            <button
+              onClick={() => navigateTo('admin')}
+              className="text-[10px] text-slate-400 hover:text-rose-500 hover:underline transition-colors cursor-pointer border-none bg-none outline-none"
+            >
+              Access Admin Workspace
+            </button>
+          </div>
         </div>
       </footer>
     </div>

@@ -181,7 +181,12 @@ app.use((req, res, next) => {
   const matchedPath = req.headers["x-matched-path"];
   const originalUrlHeader = req.headers["x-original-url"];
   
-  if (matchedPath && typeof matchedPath === "string") {
+  // If the URL already looks like a valid API path, let Express handle it naturally
+  if (req.url && req.url.startsWith("/api/")) {
+    return next();
+  }
+  
+  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api/")) {
     // Preserve query parameters if they exist in req.url
     const queryIndex = req.url.indexOf("?");
     const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
