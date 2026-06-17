@@ -32,6 +32,10 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // Authentication troubleshoot state
+  const [authError, setAuthError] = useState<{ code: string; message: string; domain: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   // Community Submissions Modal Trigger State
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
   const [submissionType, setSubmissionType] = useState<'song' | 'playlist'>('song');
@@ -208,7 +212,15 @@ export default function App() {
       return result.user;
     } catch (err: any) {
       console.error("Popup authentication rejected:", err?.message);
-      alert("Authentication Handshake Failed: " + (err?.message || "Verify your connection or project setup in Google Cloud Console."));
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        setAuthError({
+          code: err.code || 'auth/unauthorized-domain',
+          message: err.message || '',
+          domain: window.location.hostname
+        });
+      } else {
+        alert("Authentication Handshake Failed: " + (err?.message || "Verify your connection or project setup in Google Cloud Console."));
+      }
       return null;
     }
   };
@@ -592,6 +604,7 @@ export default function App() {
                   songs={songs}
                   onRefreshData={triggerReloadData}
                   user={user}
+                  onAuthError={setAuthError}
                 />
               </motion.div>
             )}
@@ -667,6 +680,109 @@ export default function App() {
                   }}
                 />
               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL FOR AUTH/UNAUTHORIZED-DOMAIN TROUBLESHOOTING */}
+      <AnimatePresence>
+        {authError && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" id="auth-troubleshoot-gate">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAuthError(null)}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs"
+            />
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl relative z-10 space-y-6 text-left"
+              id="auth-troubleshoot-modal-card"
+            >
+              <button
+                onClick={() => setAuthError(null)}
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-500 shadow-sm">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-sans font-black text-slate-900 tracking-tight">
+                    Domain Authorization Required
+                  </h3>
+                  <p className="text-[10px] font-mono text-slate-400">
+                    Error Code: auth/unauthorized-domain
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-500 space-y-3 leading-relaxed">
+                <p>
+                  Google Authentication has been rejected because this domain is not white-listed under the authorized domains list in your Firebase Configuration project.
+                </p>
+                
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Your Current Site Domain</span>
+                  <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-lg p-2 font-mono text-xs text-slate-800">
+                    <span className="truncate selection:bg-slate-100 select-all">{authError.domain}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(authError.domain);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-800 text-[10px] font-bold font-sans cursor-pointer transition flex items-center gap-1.5 focus:outline-none"
+                    >
+                      {copied ? (
+                        <>
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <span>Copy</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Easy 3-Step Solution Guide</span>
+                
+                <ol className="text-xs text-slate-600 space-y-2.5 list-decimal pl-4 leading-relaxed font-sans">
+                  <li>
+                    Open your <a href="https://console.firebase.google.com/project/gen-lang-client-0356842658/authentication/providers" target="_blank" rel="noopener noreferrer" className="text-rose-500 hover:underline font-bold inline-flex items-center gap-0.5">Firebase Auth Console <ArrowRight className="w-3 h-3 inline" /></a>
+                  </li>
+                  <li>
+                    Scroll down to the <strong className="text-slate-800 font-bold">Authorized Domains</strong> section near the bottom of that page.
+                  </li>
+                  <li>
+                    Click <strong className="text-slate-800 font-bold">Add Domain</strong>, paste the copied domain string above, and hit <strong className="text-slate-800 font-bold">Add</strong>.
+                  </li>
+                </ol>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <p className="text-[10px] text-slate-400 leading-relaxed max-w-[280px]">
+                  Requires configuration by the project owner in the Firebase Console admin panel. Once added, authentication resumes instantly.
+                </p>
+                <button
+                  onClick={() => setAuthError(null)}
+                  className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

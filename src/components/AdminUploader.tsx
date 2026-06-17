@@ -20,9 +20,10 @@ interface AdminUploaderProps {
   songs: Song[];
   onRefreshData: () => void;
   user: any; // Checked Firebase user
+  onAuthError?: (errInfo: { code: string; message: string; domain: string }) => void;
 }
 
-export default function AdminUploader({ playlists, songs, onRefreshData, user }: AdminUploaderProps) {
+export default function AdminUploader({ playlists, songs, onRefreshData, user, onAuthError }: AdminUploaderProps) {
   // Check if current user is admin
   const isAdmin = user?.email === 'therishx@gmail.com';
 
@@ -183,12 +184,35 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user }:
     try {
       const finalRedirectUri = window.location.origin + '/auth/callback';
       const res = await fetch(`/api/wordpress/oauth/url?redirect_uri=${encodeURIComponent(finalRedirectUri)}`);
-      if (!res.ok) {
-        const errData = await res.json();
-        alert(errData.error || 'Enable WordPress configuration properties in workspace settings first.');
+      
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('WordPress OAuth response was not JSON:', text);
+        alert(
+          "Could not initialize WordPress Connection:\n\n" +
+          "Your current host is not running the full-stack server backend. If you are browsing from a static hosting provider (like Vercel), " +
+          "the backend server routes in `server.ts` are unreachable. Real-time WordPress OAuth synchronization requires the full-stack server backend to be running.\n\n" +
+          "Ensure you use the AI Studio preview URL, or configure your host to run the Node.js backend.\n\n" +
+          "Required secrets:\n" +
+          "- WORDPRESS_CLIENT_ID\n" +
+          "- WORDPRESS_CLIENT_SECRET"
+        );
         return;
       }
-      const { url } = await res.json();
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Enable WordPress configuration properties in workspace settings first.');
+        return;
+      }
+
+      if (!data.url) {
+        alert("Server failed to generate a valid WordPress authorization URL.");
+        return;
+      }
+
+      const { url } = data;
       const width = 600;
       const height = 700;
       const left = window.screen.width / 2 - width / 2;
@@ -576,12 +600,22 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user }:
         <div className="pt-2 flex justify-center">
           <button
             onClick={async () => {
-              const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+              const { signInWithPopup } = await import('firebase/auth');
               const { auth, googleProvider } = await import('../utils/firebase');
               try {
                 await signInWithPopup(auth, googleProvider);
               } catch (err: any) {
-                alert("Authentication Failed: " + (err.message || err));
+                if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+                  if (onAuthError) {
+                    onAuthError({
+                      code: err.code || 'auth/unauthorized-domain',
+                      message: err.message || '',
+                      domain: window.location.hostname
+                    });
+                  }
+                } else {
+                  alert("Authentication Failed: " + (err.message || err));
+                }
               }
             }}
             className="w-full py-3 px-5 bg-slate-900 border border-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2.5 transition cursor-pointer shadow-sm active:scale-[0.99]"
