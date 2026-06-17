@@ -176,6 +176,22 @@ function getGeminiClient(): GoogleGenAI | null {
 const app = express();
 app.use(express.json());
 
+// Path correction middleware for Vercel Serverless environment
+app.use((req, res, next) => {
+  const matchedPath = req.headers["x-matched-path"];
+  const originalUrlHeader = req.headers["x-original-url"];
+  
+  if (matchedPath && typeof matchedPath === "string") {
+    // Preserve query parameters if they exist in req.url
+    const queryIndex = req.url.indexOf("?");
+    const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
+    req.url = matchedPath + query;
+  } else if (originalUrlHeader && typeof originalUrlHeader === "string") {
+    req.url = originalUrlHeader;
+  }
+  next();
+});
+
 // ==========================================
 // 1. PUBLIC & ADMIN LYRIC APP DATABASE APIs
 // ==========================================
