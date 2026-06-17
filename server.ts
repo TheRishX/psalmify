@@ -177,13 +177,42 @@ const app = express();
 
 // Support pre-parsed bodies (Vercel serverless environment sometimes pre-parses req.body)
 const jsonParser = express.json();
-app.use((req, res, next) => {
+app.use((req: any, res: any, next: any) => {
   if (req.method === "GET" || req.method === "HEAD") {
     return next();
   }
-  if (req.body !== undefined && req.body !== null && typeof req.body === "object") {
-    return next();
+  
+  if (req.body !== undefined && req.body !== null) {
+    // If req.body is a Buffer, parse it to JSON
+    if (Buffer.isBuffer(req.body)) {
+      try {
+        const rawStr = req.body.toString("utf-8");
+        req.body = rawStr.trim() ? JSON.parse(rawStr) : {};
+      } catch (e) {
+        console.error("[BODY PARSE] Failed to parse req.body Buffer:", e);
+        req.body = {};
+      }
+      return next();
+    }
+    
+    // If req.body is a string, parse it to JSON
+    if (typeof req.body === "string") {
+      try {
+        req.body = req.body.trim() ? JSON.parse(req.body) : {};
+      } catch (e) {
+        console.error("[BODY PARSE] Failed to parse req.body string:", e);
+        req.body = {};
+      }
+      return next();
+    }
+
+    // If it is already a parsed object, proceed
+    if (typeof req.body === "object") {
+      return next();
+    }
   }
+
+  // Fallback to express.json()
   jsonParser(req, res, next);
 });
 

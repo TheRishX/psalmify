@@ -448,48 +448,51 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
           // Master Passphrase Entrance
           <motion.div 
             key="login-box"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            className="max-w-md mx-auto bg-white border border-slate-205/80 rounded-2xl p-8 space-y-6 shadow-md"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-8 space-y-6 shadow-sm hover:shadow-md transition-shadow duration-300"
           >
-            <div className="text-center space-y-2">
-              <div className="mx-auto w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-800 border border-slate-200">
-                <Lock className="w-5 h-5" />
+            <div className="text-center space-y-3">
+              <div className="mx-auto w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700 shadow-sm">
+                <Lock className="w-5 h-5 stroke-[1.5]" />
               </div>
-              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Admin Authorization Gate</h2>
-              <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
-                Please enter the master administrator security passphrase to enable song creation, edit layouts, and REST publishing mechanisms.
-              </p>
+              <div className="space-y-1">
+                <h2 className="text-lg font-bold text-slate-900 tracking-tight">Admin Authorization</h2>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
+                  Please enter your administrator passphrase to manage lyrics, upload new tracks, and utilize publishing gateways.
+                </p>
+              </div>
             </div>
 
             <form onSubmit={handleAdminAuth} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold text-slate-400 block uppercase">Administrator Passphrase</label>
+                <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 block uppercase">Passphrase</label>
                 <div className="relative">
                   <input
                     type="password"
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="Enter security passphrase"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-slate-450 focus:bg-white outline-none rounded-xl p-3 text-xs font-mono placeholder:text-slate-400 text-slate-800 transition-all font-sans"
+                    placeholder="Enter master password"
+                    className="w-full bg-slate-50/50 border border-slate-200/80 focus:border-slate-900 focus:ring-1 focus:ring-slate-950/5 focus:bg-white outline-none rounded-xl py-3 pl-3.5 pr-10 text-xs font-mono placeholder:text-slate-400 text-slate-800 transition-all"
                     required
                   />
-                  <Key className="absolute right-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                  <Key className="absolute right-3.5 top-3.5 w-4 h-4 text-slate-450 stroke-[1.5]" />
                 </div>
                 {adminLoginError && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 mt-2 text-xs text-red-700 font-mono flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                    <span>{adminLoginError}</span>
+                  <div className="bg-red-50/60 border border-red-200/60 rounded-xl p-3 mt-2 text-xs text-red-700 font-mono flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{adminLoginError}</span>
                   </div>
                 )}
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold uppercase transition-all shadow-sm cursor-pointer"
+                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-850 text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all shadow-sm active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
               >
-                Authenticate Dashboard Session →
+                <span>Authenticate Session</span>
+                <span className="text-slate-400 text-xs font-normal">→</span>
               </button>
             </form>
           </motion.div>
@@ -497,23 +500,23 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
           // Fully Light-Themed, Polished Split-Screen Workspace
           <motion.div
             key="uploader-workspace"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
             {/* Quick Song Switcher Bar */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+            <div className="bg-white border border-slate-200/85 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
               <div className="flex items-center gap-3">
-                <span className="text-xs font-mono text-slate-500 font-bold uppercase whitespace-nowrap">Edit Existing:</span>
+                <span className="text-[10px] font-mono text-slate-450 font-bold uppercase tracking-wider whitespace-nowrap">Edit Existing:</span>
                 <div className="flex gap-1.5 flex-wrap items-center">
                   {songs.map(song => (
                     <button
                       key={song.id}
                       onClick={() => selectSongToEdit(song)}
-                      className={`px-3 py-1 rounded-lg text-xs font-sans transition-all cursor-pointer border ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-sans transition-all cursor-pointer border ${
                         selectedSongId === song.id 
-                          ? 'bg-slate-900 text-white font-bold border-slate-950 shadow-sm' 
-                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800 border-slate-200'
+                          ? 'bg-slate-900 text-white font-semibold border-slate-950 shadow-sm' 
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-850 border-slate-200/70'
                       }`}
                     >
                       {song.title}
@@ -521,71 +524,71 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
                   ))}
                   <button
                     onClick={handleNewSongReset}
-                    className="px-3 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100/70 border border-rose-200 rounded-lg text-xs font-bold font-mono uppercase flex items-center gap-1 cursor-pointer transition-all"
+                    className="px-3 py-1.5 bg-rose-50/70 text-rose-750 hover:bg-rose-100/70 border border-rose-200/60 rounded-xl text-xs font-semibold font-mono uppercase flex items-center gap-1 cursor-pointer transition-all active:scale-[0.98]"
                   >
-                    <Plus className="w-3.5 h-3.5" /> New Song
+                    <Plus className="w-3.5 h-3.5 stroke-[2]" /> Add Song
                   </button>
                 </div>
               </div>
 
               <button 
                 onClick={() => setIsAdminLoggedIn(false)}
-                className="text-[10px] font-mono text-slate-500 hover:text-slate-900 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-3 py-1 rounded-lg cursor-pointer transition-all font-bold flex items-center gap-1"
+                className="text-[10px] font-mono text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/70 px-3 py-1.5 rounded-xl cursor-pointer transition-all font-bold flex items-center gap-1.5 active:scale-[0.98]"
               >
-                <LogOut className="w-3.5 h-3.5" /> Disconnect Panel
+                <LogOut className="w-3.5 h-3.5 stroke-[1.5]" /> Disconnect
               </button>
             </div>
 
             {/* Split Screen Workspace Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
               
-              {/* Form Input fields */}
+              {/* Form Input fields column */}
               <div className="xl:col-span-5 space-y-6">
                 
                 {/* Form fields card */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                <div className="bg-white border border-slate-200/85 rounded-2xl p-6 space-y-5 shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h3 className="font-extrabold text-slate-900 text-sm tracking-tight flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-slate-700" />
+                    <h3 className="font-bold text-slate-900 text-sm tracking-tight flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-slate-500 stroke-[1.5]" />
                       {selectedSongId ? 'Update Lyric Form' : 'Add New Lyric Form'}
                     </h3>
-                    <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-500">
-                      {selectedSongId ? `ID: ${selectedSongId}` : 'CLEAN SHEET'}
+                    <span className="text-[9px] font-mono bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-lg text-slate-505 font-semibold">
+                      {selectedSongId ? `ID: ${selectedSongId}` : 'New Track Draft'}
                     </span>
                   </div>
 
                   {/* Metadata fields Row 1 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Song Title *</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Song Title *</label>
                       <input
                         type="text"
                         value={songTitle}
                         onChange={(e) => setSongTitle(e.target.value)}
                         placeholder="e.g. Amazing Grace"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:bg-white transition-all font-sans placeholder:text-slate-400"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Artist / Composer *</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Artist / Developer *</label>
                       <input
                         type="text"
                         value={songArtist}
                         onChange={(e) => setSongArtist(e.target.value)}
                         placeholder="e.g. John Newton"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:bg-white transition-all font-sans placeholder:text-slate-400"
                       />
                     </div>
                   </div>
 
                   {/* Metadata fields Row 2 */}
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Genre</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Genre</label>
                       <select
                         value={songGenre}
                         onChange={(e) => setSongGenre(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-850 outline-none focus:border-slate-900 focus:bg-white transition-all cursor-pointer"
                       >
                         <option value="Contemporary">Contemporary</option>
                         <option value="Hymn">Hymn</option>
@@ -595,59 +598,59 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
                         <option value="Traditional">Traditional</option>
                       </select>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Album</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Album</label>
                       <input
                         type="text"
                         value={songAlbum}
                         onChange={(e) => setSongAlbum(e.target.value)}
                         placeholder="e.g. Legacy"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Duration</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Duration</label>
                       <input
                         type="text"
                         value={songDuration}
                         onChange={(e) => setSongDuration(e.target.value)}
                         placeholder="e.g. 3:45"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all font-mono"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:bg-white transition-all font-mono placeholder:text-slate-400"
                       />
                     </div>
                   </div>
 
                   {/* Resource URLs */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Cover Image Link</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Cover Image URL</label>
                       <input
                         type="text"
                         value={songCoverUrl}
                         onChange={(e) => setSongCoverUrl(e.target.value)}
                         placeholder="https://images.unsplash.com/..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">YouTube Link</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">YouTube Video Link</label>
                       <input
                         type="text"
                         value={songYoutubeUrl}
                         onChange={(e) => setSongYoutubeUrl(e.target.value)}
                         placeholder="https://youtube.com/..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
                       />
                     </div>
                   </div>
 
                   {/* Align playlist mapping checks */}
-                  <div className="space-y-1.5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-                    <label className="text-[10px] font-mono text-slate-500 block font-bold uppercase flex items-center gap-1">
-                      <PlaylistIcon className="w-3.5 h-3.5 text-slate-600" />
+                  <div className="space-y-2 p-4 bg-slate-50/50 border border-slate-200/70 rounded-xl">
+                    <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase flex items-center gap-1.5">
+                      <PlaylistIcon className="w-3.5 h-3.5 text-slate-500" />
                       Map Song to Collections
                     </label>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
                       {playlists.map(p => {
                         const isAssigned = assignedPlaylists.includes(p.id);
                         return (
@@ -655,13 +658,13 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
                             type="button"
                             key={p.id}
                             onClick={() => handlePlaylistToggle(p.id)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                            className={`px-3 py-1.5 rounded-xl text-[10px] font-sans font-semibold tracking-wide transition-all flex items-center gap-1 cursor-pointer border ${
                               isAssigned 
-                                ? 'bg-slate-900 border-slate-950 text-white' 
-                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                ? 'bg-slate-900 border-slate-950 text-white shadow-sm' 
+                                : 'bg-white border-slate-200/80 text-slate-500 hover:border-slate-350 hover:text-slate-800'
                             }`}
                           >
-                            {isAssigned && <Check className="w-3 h-3" />}
+                            {isAssigned && <Check className="w-3 h-3 text-white" />}
                             {p.name}
                           </button>
                         );
@@ -670,10 +673,10 @@ export default function AdminUploader({ playlists, songs, onRefreshData }: Admin
                   </div>
 
                   {/* Lyrics raw pasting block */}
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-mono text-slate-400 block font-bold uppercase">Lyrics Entry Sheet *</label>
-                      <span className="text-[9px] text-slate-400 font-mono italic">Support sections: [Chorus], [Verse 1], [Bridge]</span>
+                      <label className="text-[10px] font-mono text-slate-500 block font-bold tracking-wider uppercase">Lyrics Entry Sheet *</label>
+                      <span className="text-[9px] text-slate-400 font-mono italic">Support: [Chorus], [Verse 1], [Bridge]</span>
                     </div>
                     <textarea
                       value={songRawLyrics}
@@ -686,28 +689,27 @@ That saved a wretch like me!
 [Chorus]
 My chains are gone, I've been set free..."
                       rows={14}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-850 font-mono outline-none focus:border-slate-400 focus:bg-white transition-all leading-relaxed resize-y custom-scrollbar"
+                      className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-800 font-mono outline-none focus:border-slate-900 focus:bg-white transition-all leading-relaxed resize-y"
                     />
                   </div>
 
                   {/* AI & Local actions button grid */}
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    
-                    {/* Gemini integration trigger (Optional) */}
+                  <div className="grid grid-cols-2 gap-3.5 pt-1">
+                    {/* Gemini integration trigger */}
                     <button
                       type="button"
                       onClick={handleGeminiFormat}
                       disabled={isAiBeautifying || !songRawLyrics}
-                      className="py-2.5 px-3 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-150/50 disabled:opacity-40 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      className="py-2.5 px-3 bg-indigo-50/80 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 disabled:opacity-45 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98]"
                     >
                       {isAiBeautifying ? (
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>AI Beautifying...</span>
+                          <span>Formatting...</span>
                         </>
                       ) : (
                         <>
-                          <Sparkles className="w-3.5 h-3.5" />
+                          <Sparkles className="w-3.5 h-3.5 stroke-[1.5]" />
                           <span>AI format lyrics</span>
                         </>
                       )}
@@ -718,20 +720,19 @@ My chains are gone, I've been set free..."
                       type="button"
                       onClick={handleSaveLocal}
                       disabled={localSaveStatus === 'saving'}
-                      className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                      className="py-2.5 px-3 bg-slate-900 hover:bg-slate-850 text-white rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
                     >
                       {localSaveStatus === 'saving' ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : localSaveStatus === 'success' ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
                       ) : (
-                        <Save className="w-3.5 h-3.5" />
+                        <Save className="w-3.5 h-3.5 stroke-[1.5]" />
                       )}
                       <span>
                         {localSaveStatus === 'saving' ? 'Saving...' : localSaveStatus === 'success' ? 'Saved' : selectedSongId ? 'Update Song' : 'Create Song'}
                       </span>
                     </button>
-
                   </div>
 
                   {/* Delete Song if selected */}
@@ -739,9 +740,9 @@ My chains are gone, I've been set free..."
                     <button
                       type="button"
                       onClick={() => handleDeleteSong(selectedSongId)}
-                      className="w-full py-2 px-3 border border-red-200 bg-red-50 text-red-700 hover:bg-red-100/70 text-xs font-bold font-mono transition rounded-xl cursor-pointer flex items-center justify-center gap-1"
+                      className="w-full py-2.5 px-3 border border-red-200/60 bg-red-50/60 text-red-700 hover:bg-red-100/60 text-xs font-semibold font-mono transition-all rounded-xl cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Delete track completely
+                      <Trash2 className="w-3.5 h-3.5 stroke-[1.5]" /> Delete Track
                     </button>
                   )}
 
@@ -749,15 +750,15 @@ My chains are gone, I've been set free..."
 
                 {/* AI advice if any has occurred */}
                 {aiInsights && (
-                  <div className="bg-indigo-50/50 p-4 border border-indigo-100 rounded-2xl text-xs space-y-2">
-                    <span className="text-indigo-805 font-bold font-mono flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-spin" style={{ animationDuration: '3s' }} /> Gemini Composer Advice:
+                  <div className="bg-indigo-50/40 p-5 border border-indigo-100 rounded-2xl text-xs space-y-2.5">
+                    <span className="text-indigo-850 font-bold font-mono text-[10px] tracking-wide flex items-center gap-1.5 uppercase">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-spin" style={{ animationDuration: '4s' }} /> Gemini Composer Advice
                     </span>
                     <p className="text-indigo-900 leading-relaxed font-sans">{aiInsights}</p>
                     {aiSuggestions.length > 0 && (
-                      <div className="pt-2 space-y-1 border-t border-indigo-150/45">
-                        <span className="text-[10px] text-indigo-600 font-bold block uppercase font-mono">Suggested Improvements:</span>
-                        <ul className="list-disc pl-4 space-y-1 text-indigo-850 font-sans">
+                      <div className="pt-2.5 space-y-1.5 border-t border-indigo-100/60">
+                        <span className="text-[9px] text-indigo-650 font-bold block uppercase font-mono tracking-wider">Suggested Improvements:</span>
+                        <ul className="list-disc pl-4 space-y-1 text-indigo-800 font-sans">
                           {aiSuggestions.map((item, idx) => (
                             <li key={idx}>{item}</li>
                           ))}
@@ -769,31 +770,33 @@ My chains are gone, I've been set free..."
 
               </div>
 
-              {/* RIGHT COLUMN: WordPress Sync & Beautified real-time Live previews (W: 55%) */}
+              {/* RIGHT COLUMN: WordPress Sync & Beautified real-time Live previews */}
               <div className="xl:col-span-7 space-y-6">
                 
                 {/* WordPress Rest synchronization gateway */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                <div className="bg-white border border-slate-200/85 rounded-2xl p-6 space-y-5 shadow-sm">
                   
                   {/* WordPress Header block */}
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-5 h-5 text-slate-705" />
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-700 shadow-sm">
+                        <Globe className="w-4 h-4 stroke-[1.5]" />
+                      </div>
                       <div>
-                        <h4 className="font-extrabold text-slate-900 text-sm">WordPress.com Sync Gateway</h4>
-                        <p className="text-[10px] text-slate-400 font-mono">Live or simulated REST publish gateway</p>
+                        <h4 className="font-bold text-slate-900 text-xs tracking-tight">WordPress Sync Gateway</h4>
+                        <p className="text-[9px] text-slate-450 font-mono tracking-wider uppercase">REST Publish integration</p>
                       </div>
                     </div>
 
-                    {/* Mode selector selector */}
-                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200/50">
+                    {/* Mode selector tab */}
+                    <div className="flex bg-slate-100/65 p-1 rounded-xl border border-slate-200/60">
                       <button
                         type="button"
                         onClick={() => { setWpMode('simulated'); setIsRealWP(false); }}
-                        className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        className={`px-3 py-1 rounded-lg text-[9px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer ${
                           wpMode === 'simulated' 
-                            ? 'bg-white text-slate-800 shadow-sm border border-slate-200/50' 
-                            : 'text-slate-400 hover:text-slate-700'
+                            ? 'bg-white text-slate-800 shadow-sm border border-slate-200/40 font-extrabold' 
+                            : 'text-slate-400 hover:text-slate-650'
                         }`}
                       >
                         Simulated
@@ -801,10 +804,10 @@ My chains are gone, I've been set free..."
                       <button
                         type="button"
                         onClick={() => { setWpMode('live'); setIsRealWP(true); }}
-                        className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        className={`px-3 py-1 rounded-lg text-[9px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer ${
                           wpMode === 'live' 
-                            ? 'bg-white text-slate-800 shadow-sm border border-slate-200/50' 
-                            : 'text-slate-400 hover:text-slate-700'
+                            ? 'bg-white text-slate-800 shadow-sm border border-slate-200/40 font-extrabold' 
+                            : 'text-slate-400 hover:text-slate-650'
                         }`}
                       >
                         Live Blog
@@ -814,37 +817,37 @@ My chains are gone, I've been set free..."
 
                   {/* Simulation Credentials Information details */}
                   {wpMode === 'simulated' ? (
-                    <div className="space-y-3">
-                      <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2">
-                        <p className="text-[11px] text-slate-600 font-sans leading-relaxed">
-                          Publish beautifully structured, style-intact HTML responsive posts directly into the database. You may authenticate using the default static simulated token below:
+                    <div className="space-y-4">
+                      <div className="space-y-2 bg-slate-50/50 border border-slate-200/70 p-4 rounded-xl">
+                        <p className="text-xs text-slate-600 font-sans leading-relaxed">
+                          We provide a fully pre-configured sandbox to mock WordPress REST schema operations. Fill in the default local credentials to test publishing.
                         </p>
                         
-                        <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                          <div className="bg-white border border-slate-200 p-2 rounded">
-                            <span className="text-[8px] text-slate-400 block font-bold">USER</span>
-                            <span className="text-slate-700 block font-extrabold">admin</span>
+                        <div className="grid grid-cols-2 gap-3 text-[10px] font-mono pt-1">
+                          <div className="bg-white border border-slate-150 p-2.5 rounded-lg shadow-sm">
+                            <span className="text-[8px] text-slate-400 block font-bold tracking-wider uppercase mb-0.5">Mock User</span>
+                            <span className="text-slate-700 block font-bold">admin</span>
                           </div>
-                          <div className="bg-white border border-slate-200 p-2 rounded">
-                            <span className="text-[8px] text-slate-400 block font-bold">PASSPHRASE</span>
-                            <span className="text-slate-700 block font-extrabold">Jesus@9664808@</span>
+                          <div className="bg-white border border-slate-150 p-2.5 rounded-lg shadow-sm">
+                            <span className="text-[8px] text-slate-400 block font-bold tracking-wider uppercase mb-0.5">Mock Passphrase</span>
+                            <span className="text-slate-700 block font-bold">Jesus@9664808@</span>
                           </div>
                         </div>
                       </div>
 
                       {wpToken ? (
-                        <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-250/70 rounded-xl text-xs text-emerald-800">
-                          <div className="flex items-center gap-2 font-mono">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                        <div className="flex items-center justify-between p-4 bg-emerald-50/60 border border-emerald-150 rounded-xl text-xs text-emerald-800 shadow-sm">
+                          <div className="flex items-center gap-3 font-mono">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 stroke-[1.5]" />
                             <div>
-                              <p className="font-extrabold">Authenticated via REST Gateway</p>
-                              <p className="text-[9px] text-emerald-600 block leading-none mt-0.5">Token: {wpToken.substring(0, 15)}...</p>
+                              <p className="font-bold">Sandbox REST Connected</p>
+                              <p className="text-[9px] text-emerald-650 block leading-none mt-1 uppercase">Token active: {wpToken.substring(0, 12)}...</p>
                             </div>
                           </div>
                           <button
                             type="button"
                             onClick={handleDisconnectWP}
-                            className="px-2.5 py-1 rounded border border-emerald-200 text-[10px] bg-white hover:bg-emerald-100 text-emerald-800 transition font-mono font-bold"
+                            className="px-3 py-1.5 rounded-xl border border-emerald-200 text-[10px] bg-white hover:bg-emerald-50 text-emerald-800 transition font-mono font-bold cursor-pointer active:scale-[0.98]"
                           >
                             Disconnect
                           </button>
@@ -852,85 +855,85 @@ My chains are gone, I've been set free..."
                       ) : (
                         // Form to fetch JWT
                         <form onSubmit={handleWPLogin} className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-3.5">
                             <div className="space-y-1">
-                              <span className="text-[9px] font-mono text-slate-400 block font-bold uppercase">Username</span>
+                              <span className="text-[10px] font-mono font-bold tracking-wide text-slate-505 block uppercase">Username</span>
                               <input
                                 type="text"
                                 value={wpUsername}
                                 onChange={(e) => setWpUsername(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-800 outline-none"
+                                className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none focus:border-slate-900 transition-all"
                               />
                             </div>
                             <div className="space-y-1">
-                              <span className="text-[9px] font-mono text-slate-400 block font-bold uppercase">Password</span>
+                              <span className="text-[10px] font-mono font-bold tracking-wide text-slate-505 block uppercase">Password</span>
                               <input
                                 type="password"
                                 value={wpPassword}
                                 onChange={(e) => setWpPassword(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-800 outline-none font-mono"
+                                className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none font-mono focus:border-slate-900 transition-all"
                               />
                             </div>
                           </div>
                           
                           {wpAuthError && (
-                            <p className="text-xs text-red-600 font-mono bg-red-50 p-2 border border-red-200 rounded-lg">{wpAuthError}</p>
+                            <p className="text-xs text-red-650 font-mono bg-red-50 border border-red-250/65 p-2 rounded-xl leading-relaxed">{wpAuthError}</p>
                           )}
 
                           <button
                             type="submit"
                             disabled={wpIsAuthenticating}
-                            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                            className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-700 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98]"
                           >
-                            {wpIsAuthenticating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5 text-slate-650" />}
-                            <span>Acquire Simulated JWT Handshake token</span>
+                            {wpIsAuthenticating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5 text-slate-600 stroke-[1.5]" />}
+                            <span>Authorize WordPress Sandbox JWT</span>
                           </button>
                         </form>
                       )}
                     </div>
                   ) : (
                     // REAL WORDPRESS OAUTH WIDGET
-                    <div className="space-y-3">
-                      <p className="text-xs text-slate-500 font-sans leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200/60">
-                        Map layout tables inside your real WordPress.com dashboard. Initiates popup REST authorization scopes.
+                    <div className="space-y-4">
+                      <p className="text-xs text-slate-500 font-sans leading-relaxed bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 shadow-sm">
+                        Redirect live-formatted responsive postings to your official personal blog using secure REST OAuth 2.0 handshake endpoints.
                       </p>
 
-                      <div className="space-y-3">
+                      <div className="space-y-3.5">
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-mono font-bold text-slate-400 block uppercase">WORDPRESS COM BLOG PATH DOMAIN</span>
+                          <span className="text-[9px] font-mono font-bold text-slate-450 block uppercase tracking-wider">WordPress.com Blog Domain</span>
                           <input
                             type="text"
                             value={wpBlogUrl}
                             onChange={(e) => setWpBlogUrl(e.target.value)}
                             placeholder="e.g. psalmify.wordpress.com"
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-850 outline-none font-mono"
+                            className="w-full bg-slate-50/50 border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-800 outline-none font-mono focus:border-slate-900 transition-all"
                           />
                         </div>
 
                         {wpToken && isRealWP ? (
-                          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 space-y-2">
+                          <div className="p-4 bg-emerald-50/60 border border-emerald-150 rounded-xl text-xs text-emerald-800 space-y-2 shadow-sm">
                             <div className="flex items-center justify-between">
                               <span className="font-mono font-bold block flex items-center gap-1.5">
-                                <Check className="w-4 h-4 text-emerald-600" /> Connecting: {wpBlogUrl}
+                                <Check className="w-4 h-4 text-emerald-600" /> Linked: {wpBlogUrl}
                               </span>
                               <button
                                 type="button"
                                 onClick={handleDisconnectWP}
-                                className="px-2 py-0.5 rounded border border-emerald-250/60 bg-white hover:bg-emerald-100 font-mono font-bold text-[9px]"
+                                className="px-2.5 py-1 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-50 font-mono font-bold text-[9px] cursor-pointer"
                               >
-                                Clear
+                                Disconnect
                               </button>
                             </div>
-                            <p className="text-[10px] text-emerald-600">Secure REST scopes bind active posts table editing rights.</p>
+                            <p className="text-[10px] text-emerald-600 font-sans">Handshake credentials successfully initialized for remote posting.</p>
                           </div>
                         ) : (
                           <button
                             type="button"
                             onClick={handleWordPressOAuth}
-                            className="w-full py-2.5 bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                            className="w-full py-2.5 bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98]"
                           >
-                            <Globe className="w-3.5 h-3.5 text-slate-200" />
-                            <span>Connect via WordPress.com OAuth 2.0 Scope</span>
+                            <Globe className="w-3.5 h-3.5 text-slate-300 stroke-[1.5]" />
+                            <span>Connect WordPress.com Live Account</span>
                           </button>
                         )}
                       </div>
@@ -939,30 +942,30 @@ My chains are gone, I've been set free..."
 
                   {/* Post Publish actions */}
                   {wpToken && (
-                    <div className="pt-2 border-t border-slate-100 space-y-3">
+                    <div className="pt-3 border-t border-slate-100 space-y-3.5">
                       
                       {syncStatus !== 'idle' && (
-                        <div className={`p-3.5 rounded-xl border text-xs font-mono flex items-start gap-2 ${
+                        <div className={`p-4 rounded-xl border text-xs font-mono flex items-start gap-2.5 ${
                           syncStatus === 'success' 
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-                            : 'bg-red-50 border-red-200 text-red-600'
+                            ? 'bg-emerald-50/60 border-emerald-250 text-emerald-800 shadow-sm' 
+                            : 'bg-red-50 border-red-200 text-red-650'
                         }`}>
                           {syncStatus === 'success' ? (
-                            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-500 mt-0.5" />
+                            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
                           ) : (
-                            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-400 mt-0.5" />
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-500 mt-0.5" />
                           )}
-                          <div>
-                            <p className="font-extrabold">{syncStatus === 'success' ? 'Publish succeeded!' : 'Sync Error'}</p>
-                            <p className="text-[10px] mt-0.5 leading-relaxed">{syncMessage}</p>
+                          <div className="space-y-1">
+                            <p className="font-bold">{syncStatus === 'success' ? 'Published successfully!' : 'Gateway Refusal'}</p>
+                            <p className="text-[10px] text-slate-500 font-sans leading-relaxed">{syncMessage}</p>
                             {syncedWPLink && (
                               <a 
                                 href={syncedWPLink} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-0.5 text-emerald-900 underline font-bold mt-1.5"
+                                className="inline-flex items-center gap-0.5 text-emerald-950 underline font-bold mt-1 text-[10px] font-mono leading-none hover:text-emerald-800"
                               >
-                                View Published lyrics page <ChevronRight className="w-3.5 h-3.5" />
+                                View Lyrics Post <ChevronRight className="w-3 h-3" />
                               </a>
                             )}
                           </div>
@@ -973,7 +976,7 @@ My chains are gone, I've been set free..."
                         type="button"
                         onClick={handleWordPressSync}
                         disabled={isSyncing}
-                        className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                        className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-850 text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
                       >
                         {isSyncing ? (
                           <>
@@ -982,8 +985,8 @@ My chains are gone, I've been set free..."
                           </>
                         ) : (
                           <>
-                            <Share2 className="w-4 h-4 text-emerald-400 animate-pulse" />
-                            <span>Publish direct html to WordPress REST DB</span>
+                            <Share2 className="w-4 h-4 text-emerald-450 stroke-[1.5] animate-pulse" />
+                            <span>Publish directly to WordPress REST DB</span>
                           </>
                         )}
                       </button>
@@ -994,49 +997,51 @@ My chains are gone, I've been set free..."
                 </div>
 
                 {/* Real-time HTML live layout previewer */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <span className="text-xs font-mono font-bold text-slate-500 flex items-center gap-1">
-                      <Eye className="w-3.5 h-3.5" /> Real-time Format Parser
+                <div className="bg-white border border-slate-200/85 rounded-2xl p-6 space-y-4 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <span className="text-xs font-mono font-bold text-slate-500 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Eye className="w-3.5 h-3.5 text-slate-500" /> Live Render Preview
                     </span>
-                    <span className="text-[9px] font-mono bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-400">
-                      LIVE DRAFT
+                    <span className="text-[9px] font-mono bg-slate-50 border border-slate-200/60 px-2 py-0.5 rounded-lg text-slate-400 font-semibold tracking-wider">
+                      AUTO GENERATED
                     </span>
                   </div>
 
                   {previewSections.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 text-xs font-mono bg-slate-50 border border-dashed border-slate-200 rounded-xl leading-relaxed">
-                      Please enter title/lyrics inside form sheet to trigger real-time parser output formatting.
+                    <div className="text-center py-16 text-slate-400 text-xs font-mono bg-slate-50/50 border border-dashed border-slate-200 rounded-xl leading-relaxed">
+                      Please select/create a lyric draft to launch the styled HTML live previewer.
                     </div>
                   ) : (
-                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar bg-slate-50 p-4 border border-slate-150 rounded-xl">
-                      <div className="text-center pb-3 border-b border-slate-200/50">
-                        <h2 className="text-lg font-serif italic text-slate-900">{songTitle || 'Amazing Grace'}</h2>
-                        <span className="text-[10px] tracking-wider text-slate-400 font-mono">By {songArtist || 'John Newton'}</span>
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar bg-slate-50/40 p-5 border border-slate-200 rounded-xl">
+                      <div className="text-center pb-4 border-b border-slate-200/60 space-y-1">
+                        <h2 className="text-xl font-serif text-slate-900 font-bold">{songTitle || 'Amazing Grace'}</h2>
+                        <span className="text-[10px] tracking-wider text-slate-400 font-mono uppercase">BY {songArtist || 'John Newton'}</span>
                       </div>
 
-                      {previewSections.map((section, idx) => {
-                        const isChorus = section.type === 'chorus';
-                        return (
-                          <div 
-                            key={idx}
-                            className={`p-3.5 rounded-lg border text-xs leading-relaxed ${
-                              isChorus 
-                                ? 'bg-rose-50/70 border-rose-150 pl-4 border-l-4 border-l-rose-500 font-serif italic text-slate-900' 
-                                : 'bg-white border-slate-200 pl-4 border-l-4 border-l-slate-350 text-slate-700'
-                            }`}
-                          >
-                            <span className={`text-[8px] font-mono block font-bold uppercase mb-1.5 tracking-wide ${isChorus ? 'text-rose-600' : 'text-slate-400'}`}>
-                              {section.label}
-                            </span>
-                            <div className="space-y-1">
-                              {section.lines.map((line, lIdx) => (
-                                <p key={lIdx}>{line}</p>
-                              ))}
+                      <div className="space-y-4 pt-1">
+                        {previewSections.map((section, idx) => {
+                          const isChorus = section.type === 'chorus';
+                          return (
+                            <div 
+                              key={idx}
+                              className={`p-4 rounded-xl border text-xs leading-relaxed ${
+                                isChorus 
+                                  ? 'bg-rose-50/30 border-rose-150 pl-4 border-l-4 border-l-rose-500 font-serif italic text-slate-900' 
+                                  : 'bg-white border-slate-150 pl-4 border-l-4 border-l-slate-400 text-slate-700 font-sans'
+                              }`}
+                            >
+                              <span className={`text-[9px] font-mono block font-bold uppercase mb-2 tracking-wider ${isChorus ? 'text-rose-600 font-extrabold' : 'text-slate-450'}`}>
+                                {section.label}
+                              </span>
+                              <div className="space-y-1 text-slate-800">
+                                {section.lines.map((line, lIdx) => (
+                                  <p key={lIdx} className="leading-6">{line}</p>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
