@@ -178,54 +178,70 @@ const app = express();
 // Support pre-parsed bodies (Vercel serverless environment sometimes pre-parses req.body)
 const jsonParser = express.json();
 app.use((req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD") {
+    return next();
+  }
   if (req.body !== undefined && req.body !== null && typeof req.body === "object") {
     return next();
   }
   jsonParser(req, res, next);
 });
 
-// Path correction middleware for Vercel Serverless environment
+// Path correction and route tracking middleware for Vercel Serverless environment
 app.use((req, res, next) => {
-  let apiPath: string | null = null;
-  
-  if (req.query && typeof req.query.__vercel_api_path === "string") {
-    apiPath = req.query.__vercel_api_path;
-  } else {
-    // Manual fallback parse of req.url query string
-    const urlParts = req.url.split("?");
-    if (urlParts.length > 1) {
-      const searchParams = new URLSearchParams(urlParts[1]);
-      const paramVal = searchParams.get("__vercel_api_path");
-      if (paramVal) {
-        apiPath = paramVal;
+  try {
+    let apiPath: string | null = null;
+    
+    // Check query params
+    if (req.query && typeof req.query.__vercel_api_path === "string") {
+      apiPath = req.query.__vercel_api_path;
+    } else {
+      // Manual fallback parse of req.url query string
+      const urlParts = req.url.split("?");
+      if (urlParts.length > 1) {
+        const searchParams = new URLSearchParams(urlParts[1]);
+        const paramVal = searchParams.get("__vercel_api_path");
+        if (paramVal) {
+          apiPath = paramVal;
+        }
       }
     }
-  }
 
-  if (apiPath) {
-    // Clean up query param
-    if (req.query) {
-      delete req.query.__vercel_api_path;
+    if (apiPath) {
+      // Safe mutable replicate of the query object to prevent TypeError on read-only object properties
+      if (req.query) {
+        try {
+          req.query = { ...req.query };
+          delete req.query.__vercel_api_path;
+        } catch (e) {
+          console.warn("[MIDDLEWARE WARNING] Could not delete __vercel_api_path safely:", e);
+        }
+      }
+      
+      // Reconstruct clean query parameter list
+      const queryParts = Object.entries(req.query || {}).filter(([k]) => k !== "__vercel_api_path");
+      const qParts = queryParts.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+      const qStr = qParts.length > 0 ? "?" + qParts.join("&") : "";
+      
+      req.url = apiPath + qStr;
+    } else {
+      // Traditional fallback headers check
+      const originalUrlHeader = req.headers["x-original-url"];
+      const matchedPath = req.headers["x-matched-path"];
+      
+      if (originalUrlHeader && typeof originalUrlHeader === "string") {
+        req.url = originalUrlHeader;
+      } else if (matchedPath && typeof matchedPath === "string" && !matchedPath.endsWith("index") && !matchedPath.endsWith("index.ts") && !matchedPath.endsWith("index.js") && matchedPath.startsWith("/api/")) {
+        const queryIndex = req.url.indexOf("?");
+        const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
+        req.url = matchedPath + query;
+      }
     }
-    
-    // Reconstruct clean query parameter list
-    const queryParts = Object.entries(req.query || {}).filter(([k]) => k !== "__vercel_api_path");
-    const qParts = queryParts.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
-    const qStr = qParts.length > 0 ? "?" + qParts.join("&") : "";
-    
-    req.url = apiPath + qStr;
-  } else {
-    // Traditional fallback headers check
-    const originalUrlHeader = req.headers["x-original-url"];
-    const matchedPath = req.headers["x-matched-path"];
-    
-    if (originalUrlHeader && typeof originalUrlHeader === "string") {
-      req.url = originalUrlHeader;
-    } else if (matchedPath && typeof matchedPath === "string" && !matchedPath.endsWith("index") && !matchedPath.endsWith("index.ts") && !matchedPath.endsWith("index.js") && matchedPath.startsWith("/api/")) {
-      const queryIndex = req.url.indexOf("?");
-      const query = queryIndex !== -1 ? req.url.substring(queryIndex) : "";
-      req.url = matchedPath + query;
-    }
+
+    // Diagnostic Request Log
+    console.log(`[HTTP LOG] Method: ${req.method} | URL: ${req.url} | Real Path: ${req.path}`);
+  } catch (err: any) {
+    console.error("[MIDDLEWARE FATAL EXCEPTION] Occurred in path correction:", err);
   }
   next();
 });
@@ -523,29 +539,39 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
 
   // A. Authenticate and issue a JWT token
   app.post("/api/wordpress/token", (req, res) => {
-    const { username, password } = req.body;
-    
-    // Simulate simple WordPress Admin Login
-    if (username === "admin" && password === "Jesus@9664808@") {
-      const simulatedToken = "wp_jwt_" + Math.random().toString(36).substring(2, 11).toUpperCase();
-      // Set to expire in 120 seconds to allow showcasing "JWT Expired Fallback" state!
-      const expiry = Date.now() + 120000; 
+    try {
+      const body = req.body || {};
+      const { username, password } = body;
       
-      activeWordPressTokens.set(simulatedToken, expiry);
+      console.log(`[WP AUTH LOG] Initiated simulated token requests for username="${username}"`);
       
-      res.json({
-        token: simulatedToken,
-        user_email: "wp-administrator@local-music-site.org",
-        user_nickname: "WP Admin",
-        user_display_name: "Wordpress Admin",
-        expiresAt: expiry
-      });
-    } else {
-      res.status(403).json({
-        code: "invalid_credentials",
-        message: "<strong>Error:</strong> The password or username you entered is incorrect.",
-        data: { status: 403 }
-      });
+      // Simulate simple WordPress Admin Login
+      if (username === "admin" && password === "Jesus@9664808@") {
+        const simulatedToken = "wp_jwt_" + Math.random().toString(36).substring(2, 11).toUpperCase();
+        // Set to expire in 120 seconds to allow showcasing "JWT Expired Fallback" state!
+        const expiry = Date.now() + 120000; 
+        
+        activeWordPressTokens.set(simulatedToken, expiry);
+        console.log(`[WP AUTH LOG] Simulated token successfully created: ${simulatedToken}. Expiry timestamp: ${expiry}`);
+        
+        res.json({
+          token: simulatedToken,
+          user_email: "wp-administrator@local-music-site.org",
+          user_nickname: "WP Admin",
+          user_display_name: "Wordpress Admin",
+          expiresAt: expiry
+        });
+      } else {
+        console.warn(`[WP AUTH LOG] Rejected credentials username="${username}"`);
+        res.status(403).json({
+          code: "invalid_credentials",
+          message: "<strong>Error:</strong> The password or username you entered is incorrect.",
+          data: { status: 403 }
+        });
+      }
+    } catch (err: any) {
+      console.error("[WP AUTH LOG EXCEPTION] Simulated token generation failure:", err);
+      res.status(500).json({ code: "server_error", message: err.message || String(err) });
     }
   });
 
@@ -681,14 +707,27 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
     try {
       const body = req.body || {};
       const { password } = body;
+      
+      console.log(`[ADMIN AUTH DIAGNOSTICS] Verification handler invoked. Body parsed keys: ${Object.keys(body).join(", ")}`);
+      
+      if (!password) {
+        console.warn("[ADMIN AUTH WARNING] Empty password submitted.");
+        res.status(400).json({ success: false, message: "Passphrase is required." });
+        return;
+      }
+
+      console.log(`[ADMIN AUTH DIAGNOSTICS] Checking credential input (characters length: ${password.length}).`);
+
       if (password === "Jesus@9664808@") {
+        console.log("[ADMIN AUTH SUCCESS] Admin passphrase matched! Issuing session token.");
         res.json({ success: true, token: "admin_dashboard_token_vibe" });
       } else {
+        console.warn("[ADMIN AUTH FAILURE] Invalid administrator passphrase entered.");
         res.status(401).json({ success: false, message: "Invalid administrator password." });
       }
     } catch (err: any) {
-      console.error("Admin verification handler caught exception:", err);
-      res.status(500).json({ success: false, error: err.message || String(err) });
+      console.error("[ADMIN AUTH EXCEPTION] Critical error in verification handler:", err);
+      res.status(500).json({ success: false, error: err.message || String(err), message: "Internal Server Error during verification." });
     }
   });
 
@@ -817,6 +856,17 @@ Give exactly two brief bullet points (no more than 20 words each) suggesting voc
       console.error("WordPress OAuth Error Exception:", err);
       res.status(500).send(`Exception exchanging code: ${err.message}`);
     }
+  });
+
+  // Global Exception and Error Response interceptor
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("[GLOBAL RUNTIME EXCEPTION INTERCEPTED] Details:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message || String(err),
+      message: "An unexpected server-side exception occurred. Diagnostic telemetry has been updated in server logs.",
+      stack: process.env.NODE_ENV !== "production" ? err.stack : undefined
+    });
   });
 
   // ==========================================
