@@ -4,7 +4,7 @@ let bootError: any = null;
 async function bootstrap() {
   if (app || bootError) return;
   try {
-    const module = await import("../server.js");
+    const module = await import("../server");
     app = module.app || module.default;
   } catch (err: any) {
     bootError = err;

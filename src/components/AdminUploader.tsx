@@ -246,7 +246,13 @@ export default function AdminUploader({ playlists, songs, onRefreshData, user, o
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Enable WordPress configuration properties in workspace settings first.');
+        const errorDetail = data.message ? `\n\nDetails: ${data.message}` : '';
+        const hintDetail = data.hint ? `\n\nHint: ${data.hint}` : '';
+        const stackDetail = data.stack ? `\n\nStack:\n${data.stack.substring(0, 300)}` : '';
+        alert(
+          `Could not connect to WordPress Router:\n` +
+          `Error: ${data.error || 'Unknown Error'}${errorDetail}${hintDetail}${stackDetail}`
+        );
         return;
       }
 
