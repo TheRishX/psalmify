@@ -18,6 +18,7 @@ import CategoryManager from './CategoryManager';
 import DriveSync from './DriveSync';
 import PPTGenerator from './PPTGenerator';
 import SongEditorModal from './SongEditorModal';
+import LyricsFetcher from './LyricsFetcher';
 
 interface AdminUploaderProps {
   playlists: Playlist[];
@@ -28,7 +29,7 @@ interface AdminUploaderProps {
   genres: Genre[];
 }
 
-type AdminTab = 'songs' | 'playlists' | 'categories' | 'gdrive';
+type AdminTab = 'songs' | 'playlists' | 'categories' | 'gdrive' | 'fetcher';
 
 export default function AdminUploader({ 
   playlists, 
@@ -277,7 +278,8 @@ export default function AdminUploader({
     { id: 'songs', label: 'Lyrics Desk', icon: Music, color: 'text-indigo-500 bg-indigo-50 border-indigo-100' },
     { id: 'playlists', label: 'Playlists Creator', icon: ListMusic, color: 'text-sky-500 bg-sky-50 border-sky-100' },
     { id: 'categories', label: 'Categories Hub', icon: Layers, color: 'text-emerald-500 bg-emerald-50 border-emerald-100' },
-    { id: 'gdrive', label: 'GDrive Backups', icon: Cloud, color: 'text-amber-500 bg-amber-50 border-amber-100' }
+    { id: 'gdrive', label: 'GDrive Backups', icon: Cloud, color: 'text-amber-500 bg-amber-50 border-amber-100' },
+    { id: 'fetcher', label: 'Lyrics Fetcher', icon: Sparkles, color: 'text-violet-500 bg-violet-50 border-violet-100' }
   ];
 
   return (
@@ -609,6 +611,15 @@ export default function AdminUploader({
             songs={songs} 
             playlists={playlists} 
             onRefreshData={onRefreshData} 
+          />
+        )}
+
+        {/* TAB 5: AI LYRICS FETCHER */}
+        {activeTab === 'fetcher' && (
+          <LyricsFetcher 
+            genres={genres}
+            onRefreshData={onRefreshData}
+            user={user}
           />
         )}
 

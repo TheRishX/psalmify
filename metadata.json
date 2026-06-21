@@ -1,6 +1,6 @@
 {
-  "name": "Lyrics & Playlists Dashboard",
-  "description": "A lyrics and song playlist directory with a smart AI-powered editor, real-time Google Cloud Firestore storage, and active Google Drive backup syncing.",
+  "name": "Psamify Lyrics",
+  "description": "Smart, seamless, real-time lyrics finder and bilingual parallel alignment platform with automatic Gemini AI search grounding.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

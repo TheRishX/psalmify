@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // Initialize environment variables
 dotenv.config();
@@ -379,6 +379,97 @@ app.post("/api/gemini/generate-cover", async (req, res) => {
       success: true,
       source: 'unsplash-fallback',
       url: fallbackUrl
+    });
+  }
+});
+
+app.post("/api/gemini/fetch-lyrics", async (req, res) => {
+  const { query } = req.body;
+  if (!query || typeof query !== "string" || !query.trim()) {
+    res.status(400).json({ success: false, error: "Search query is required." });
+    return;
+  }
+
+  const ai = getGeminiClient();
+  if (!ai) {
+    res.json({
+      success: false,
+      error: "Gemini API Client is not configured. Please add your GEMINI_API_KEY in the Settings > Secrets section."
+    });
+    return;
+  }
+
+  try {
+    const prompt = `You are a dynamic music cataloging agent with full access to Real-time Google Search.
+Search the internet to discover information, lyrics, and YouTube links for the song: "${query}".
+
+Requirements:
+- Find the actual Official Title and Artist Name.
+- Retrieve the structured English lyrics. Add bracket headings like [INTRO], [VERSE 1], [CHORUS], [BRIDGE], [OUTRO] exactly above each section.
+- Retrieve the Hindi/Devanagari lyrics (if they exist) or translate the English sections into Hindi. Ensure the brackets and structural flow match the English lyrics EXACTLY so they fit on parallel tabs.
+- Find a working YouTube video link of the song (like: https://www.youtube.com/watch?v=...).
+- Recommend the primary music genre (e.g. Pop, Bollywood, Rock, Electronic, R&B, Devotional, Indie, etc.).
+
+Search Google live using the search tool. Return a structured JSON matching the requested schema.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING, description: "Official song title." },
+            artist: { type: Type.STRING, description: "Official artist/singer name." },
+            genre: { type: Type.STRING, description: "Primary single-word genre of the song." },
+            lyricsEnglish: { type: Type.STRING, description: "Full formatted English lyrics with clean uppercase bracket sections." },
+            lyricsHindi: { type: Type.STRING, description: "Matching Devanagari Hindi translation or native lyrics, with section bracket layout matching the English lyrics exactly." },
+            youtubeUrl: { type: Type.STRING, description: "Correct URL of the official song or audio track from YouTube." },
+            coverUrl: { type: Type.STRING, description: "Any high quality visual cover art link found, or leave blank." }
+          },
+          required: ["title", "artist", "genre", "lyricsEnglish", "lyricsHindi", "youtubeUrl"]
+        }
+      }
+    });
+
+    const text = response.text || "{}";
+    const data = JSON.parse(text.trim());
+
+    // Deduce YouTube Video ID and thumbnail from video itself
+    let derivedCoverUrl = data.coverUrl || "";
+    if (data.youtubeUrl) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = data.youtubeUrl.match(regExp);
+      const videoId = (match && match[2] && match[2].length === 11) ? match[2] : null;
+      if (videoId) {
+        // High quality thumbnail from the video itself
+        derivedCoverUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      }
+    }
+
+    // Default cover art fallback if nothing is resolved
+    if (!derivedCoverUrl) {
+      derivedCoverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop";
+    }
+
+    res.json({
+      success: true,
+      title: data.title || query,
+      artist: data.artist || "Unknown",
+      genre: data.genre || "Pop",
+      lyricsEnglish: data.lyricsEnglish || "",
+      lyricsHindi: data.lyricsHindi || "",
+      youtubeUrl: data.youtubeUrl || "",
+      coverUrl: derivedCoverUrl
+    });
+
+  } catch (error: any) {
+    console.error("AI Lyrics Fetcher Error:", error);
+    res.json({
+      success: false,
+      error: "Failed to automatically fetch lyrics via Gemini Search Grounding: " + error.message
     });
   }
 });

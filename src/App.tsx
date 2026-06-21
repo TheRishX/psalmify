@@ -434,10 +434,10 @@ export default function App() {
             </div>
             <div>
               <span className="text-sm font-sans font-extrabold tracking-tight text-slate-900 uppercase flex items-center gap-1">
-                Psalmify <span className="text-rose-600 font-normal lowercase tracking-normal">lyrics</span>
+                Psamify <span className="text-rose-600 font-normal lowercase tracking-normal">lyrics</span>
               </span>
               <p className="text-[10px] font-mono text-slate-400 tracking-wide uppercase leading-none mt-0.5">
-                Praise & Worship Catalog
+                Smart Bilingual Lyrics Directory
               </p>
             </div>
           </div>
@@ -774,7 +774,7 @@ export default function App() {
       <footer className="border-t border-slate-200 bg-white py-12 mt-16 text-center text-slate-400 text-xs font-mono">
         <div className="max-w-7xl mx-auto px-4 space-y-3">
           <p className="tracking-wide text-slate-500 uppercase font-bold text-[11px]">
-            Psalmify • Minimal Hymn & Lyric Directory
+            Psamify Lyrics • Smart Song & Bi-Lingual Lyric Alignment
           </p>
           <p className="text-[10px] text-slate-405 max-w-lg mx-auto leading-relaxed">
             Beautifully structured typography rendering engine with responsive scaling control and quick WordPress publish capabilities.
