@@ -8,7 +8,7 @@ import {
   Music, Layers, Cloud, Presentation, Plus, Search, Trash2, 
   Edit3, CheckCircle, Clock, Check, AlertCircle, Sparkles, 
   Tv, LogOut, ChevronLeft, ChevronRight, ListMusic, PlusCircle, 
-  HelpCircle, Trash, RefreshCw, X 
+  HelpCircle, Trash, RefreshCw, X, Wand2 
 } from 'lucide-react';
 import { parseRawLyrics } from '../utils/lyricParser';
 import { motion, AnimatePresence } from 'motion/react';
@@ -57,10 +57,18 @@ export default function AdminUploader({
   const [newGenre, setNewGenre] = useState('');
   const [newDuration, setNewDuration] = useState('3:30');
   const [newRawLyrics, setNewRawLyrics] = useState('');
+  const [newRawLyricsHindi, setNewRawLyricsHindi] = useState('');
   const [newYoutubeUrl, setNewYoutubeUrl] = useState('');
   const [newCoverUrl, setNewCoverUrl] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // States for dynamic AI tools inside Add Song dialog
+  const [activeUploadLangTab, setActiveUploadLangTab] = useState<'english' | 'hindi'>('english');
+  const [isBeautifyingUpload, setIsBeautifyingUpload] = useState(false);
+  const [isCorrectingUpload, setIsCorrectingUpload] = useState(false);
+  const [isTranslatingUpload, setIsTranslatingUpload] = useState(false);
+  const [isGeneratingCoverUpload, setIsGeneratingCoverUpload] = useState(false);
 
   // Create Playlist states
   const [isAddPlaylistOpen, setIsAddPlaylistOpen] = useState(false);
@@ -132,6 +140,30 @@ export default function AdminUploader({
       const parsedLyrics = parseRawLyrics(newRawLyrics);
       const songId = `song-${Date.now()}`;
       
+      let resolvedCover = newCoverUrl.trim();
+      if (!resolvedCover) {
+        try {
+          const coverRes = await fetch("/api/gemini/generate-cover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: newTitle.trim(), artist: newArtist.trim(), genre: newGenre })
+          });
+          if (coverRes.ok) {
+            const coverData = await coverRes.json();
+            if (coverData.success && coverData.url) {
+              resolvedCover = coverData.url;
+            }
+          }
+        } catch (coverErr) {
+          console.warn("AI cover fetch failed, fallback to default unsplash asset:", coverErr);
+        }
+      }
+      if (!resolvedCover) {
+        resolvedCover = "https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400&q=80";
+      }
+
+      const parsedLyricsHindi = newRawLyricsHindi.trim() ? parseRawLyrics(newRawLyricsHindi) : [];
+
       const payload: Song = {
         id: songId,
         title: newTitle.trim(),
@@ -141,8 +173,10 @@ export default function AdminUploader({
         duration: newDuration.trim(),
         rawLyrics: newRawLyrics,
         formattedLyrics: parsedLyrics,
+        rawLyricsHindi: newRawLyricsHindi.trim() || undefined,
+        formattedLyricsHindi: parsedLyricsHindi.length > 0 ? parsedLyricsHindi : undefined,
         youtubeUrl: newYoutubeUrl.trim() || undefined,
-        coverUrl: newCoverUrl.trim() || "https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400&q=80",
+        coverUrl: resolvedCover,
         isFeatured: false
       };
 
@@ -162,6 +196,7 @@ export default function AdminUploader({
       setNewAlbum('');
       setNewDuration('3:30');
       setNewRawLyrics('');
+      setNewRawLyricsHindi('');
       setNewYoutubeUrl('');
       setNewCoverUrl('');
       setIsAddSongOpen(false);
@@ -664,16 +699,186 @@ export default function AdminUploader({
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">Raw Lyrics Text Body</label>
-                  <textarea
-                    required
-                    placeholder="Enter song lyrics paragraphs. Double line breaks denote stanzas."
-                    value={newRawLyrics}
-                    onChange={(e) => setNewRawLyrics(e.target.value)}
-                    rows={8}
-                    className="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-2xl outline-none transition resize-none leading-relaxed"
-                  />
+                {/* Dual-Language Lyrics Entry with AI tools inside Admin Upload */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex border-b border-slate-100 pb-1 flex-shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveUploadLangTab('english')}
+                      className={`px-4 py-2 text-xs font-bold transition-all uppercase flex items-center gap-1.5 border-b-2 cursor-pointer ${
+                        activeUploadLangTab === 'english'
+                          ? 'border-indigo-600 text-indigo-705 font-black'
+                          : 'border-transparent text-slate-400 hover:text-slate-650'
+                      }`}
+                    >
+                      🇬🇧 English Source
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveUploadLangTab('hindi')}
+                      className={`px-4 py-2 text-xs font-bold transition-all uppercase flex items-center gap-1.5 border-b-2 cursor-pointer ${
+                        activeUploadLangTab === 'hindi'
+                          ? 'border-rose-600 text-rose-750 font-black'
+                          : 'border-transparent text-slate-400 hover:text-slate-650'
+                      }`}
+                    >
+                      🇮🇳 Hindi Translation
+                    </button>
+                  </div>
+
+                  {activeUploadLangTab === 'english' ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="text-[10px] font-mono font-bold text-slate-450 uppercase tracking-wider block">
+                          English Text Body *
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!newRawLyrics.trim()) return;
+                              setIsBeautifyingUpload(true);
+                              try {
+                                const response = await fetch('/api/gemini/beautify', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    rawLyrics: newRawLyrics,
+                                    songInfo: { title: newTitle, artist: newArtist }
+                                  })
+                                });
+                                const data = await response.json();
+                                if (data.success && data.formattedText) {
+                                  setNewRawLyrics(data.formattedText);
+                                }
+                              } catch (e) {
+                                console.error(e);
+                              } finally {
+                                setIsBeautifyingUpload(false);
+                              }
+                            }}
+                            disabled={isBeautifyingUpload || !newRawLyrics.trim()}
+                            className="p-1 px-2.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-teal-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
+                          >
+                            {isBeautifyingUpload ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Wand2 className="w-2.5 h-2.5" />}
+                            AI Beautify
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!newRawLyrics.trim()) return;
+                              setIsCorrectingUpload(true);
+                              try {
+                                const response = await fetch('/api/gemini/correct', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    rawLyrics: newRawLyrics,
+                                    songInfo: { title: newTitle, artist: newArtist }
+                                  })
+                                });
+                                const data = await response.json();
+                                if (data.success && data.formattedText) {
+                                  setNewRawLyrics(data.formattedText);
+                                }
+                              } catch (e) {
+                                console.error(e);
+                              } finally {
+                                setIsCorrectingUpload(false);
+                              }
+                            }}
+                            disabled={isCorrectingUpload || !newRawLyrics.trim()}
+                            className="p-1 px-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-amber-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
+                          >
+                            {isCorrectingUpload ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5" />}
+                            AI Correct
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        required
+                        placeholder="Paste English song lyrics paragraphs. Double line breaks denote stanzas."
+                        value={newRawLyrics}
+                        onChange={(e) => setNewRawLyrics(e.target.value)}
+                        rows={6}
+                        className="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-2xl outline-none transition resize-y leading-relaxed min-h-[140px]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="text-[10px] font-mono font-bold text-slate-450 uppercase tracking-wider block">
+                          Hindi Devanagari Lyrics
+                        </label>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!newRawLyrics.trim()) {
+                              alert("Please fill out the English source lyrics first!");
+                              return;
+                            }
+                            setIsTranslatingUpload(true);
+                            try {
+                              const res = await fetch("/api/gemini/translate", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  rawLyrics: newRawLyrics,
+                                  songInfo: { title: newTitle, artist: newArtist }
+                                })
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                if (data.success && data.formattedText) {
+                                  setNewRawLyricsHindi(data.formattedText);
+                                }
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            } finally {
+                              setIsTranslatingUpload(false);
+                            }
+                          }}
+                          disabled={isTranslatingUpload || !newRawLyrics.trim()}
+                          className="p-1 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-rose-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
+                        >
+                          {isTranslatingUpload ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5" />}
+                          AI Translate Hindi
+                        </button>
+                      </div>
+                      <textarea
+                        placeholder="Provide Devanagari lyrics or trigger 'AI Translate' helper above to convert dynamically..."
+                        value={newRawLyricsHindi}
+                        onChange={(e) => setNewRawLyricsHindi(e.target.value)}
+                        rows={6}
+                        className="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-2xl outline-none transition resize-y leading-relaxed min-h-[140px]"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">Media Link (Optional)</label>
+                      <input
+                        type="url"
+                        placeholder="e.g. https://youtube.com/watch?v=..."
+                        value={newYoutubeUrl}
+                        onChange={(e) => setNewYoutubeUrl(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-xl outline-none transition"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">Cover Art URL (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="Paste image URL, or leave blank for AI Auto Art"
+                        value={newCoverUrl}
+                        onChange={(e) => setNewCoverUrl(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-xl outline-none transition text-ellipsis"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 flex-shrink-0">

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Poppins:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Yatra+One&family=Rozha+One&family=Arima:wght@400;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -6,6 +6,11 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-display: "Space Grotesk", sans-serif;
   --font-serif: "Instrument Serif", Georgia, serif;
+  --font-hindi-poppins: "Poppins", sans-serif;
+  --font-hindi-rajdhani: "Rajdhani", sans-serif;
+  --font-hindi-yatra: "Yatra One", serif;
+  --font-hindi-rozha: "Rozha One", serif;
+  --font-hindi-arima: "Arima", serif;
 }
 
 /* Custom scrollbars for the code logs and lyric pages */

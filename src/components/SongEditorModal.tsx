@@ -23,16 +23,20 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
   const [youtubeUrl, setYoutubeUrl] = useState(song.youtubeUrl || '');
   const [coverUrl, setCoverUrl] = useState(song.coverUrl || '');
   const [rawLyrics, setRawLyrics] = useState(song.rawLyrics);
+  const [rawLyricsHindi, setRawLyricsHindi] = useState(song.rawLyricsHindi || '');
   const [isFeatured, setIsFeatured] = useState(song.isFeatured || false);
 
   // States for AI integrations
   const [isBeautifying, setIsBeautifying] = useState(false);
   const [isCorrecting, setIsCorrecting] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
+  const [isTranslatingEnglish, setIsTranslatingEnglish] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
+
+  const [activeEditTab, setActiveEditTab] = useState<'english' | 'hindi'>('english');
 
   // 1. AI Beautify lyrics
   const handleAIBeautify = async () => {
@@ -132,6 +136,8 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
 
     try {
       const parsedSections = parseRawLyrics(rawLyrics);
+      const parsedSectionsHindi = rawLyricsHindi.trim() ? parseRawLyrics(rawLyricsHindi) : [];
+
       const fields: Partial<Song> = {
         title: title.trim(),
         artist: artist.trim(),
@@ -142,6 +148,8 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
         coverUrl: coverUrl.trim() || undefined,
         rawLyrics: rawLyrics,
         formattedLyrics: parsedSections,
+        rawLyricsHindi: rawLyricsHindi.trim() || undefined,
+        formattedLyricsHindi: parsedSectionsHindi.length > 0 ? parsedSectionsHindi : undefined,
         isFeatured: isFeatured
       };
 
@@ -344,55 +352,146 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
             </div>
 
             {/* Right Column: Raw Lyrics & AI Editing Tools */}
-            <div className="flex flex-col space-y-1.5 h-full">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
-                  Raw Lyrics Content
-                </label>
-                
-                {/* AI Action Triggers */}
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={handleAIBeautify}
-                    disabled={isBeautifying || !rawLyrics.trim()}
-                    className="p-1 px-2.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-teal-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
-                    title="Structure lyrics into sections with bracket tags like [CHORUS] using AI"
-                  >
-                    {isBeautifying ? (
-                      <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                    ) : (
-                      <Wand2 className="w-2.5 h-2.5" />
-                    )}
-                    AI Beautify
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleAICorrect}
-                    disabled={isCorrecting || !rawLyrics.trim()}
-                    className="p-1 px-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-amber-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
-                    title="Fix spelling, typos and typos while maintaining song context with AI"
-                  >
-                    {isCorrecting ? (
-                      <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-2.5 h-2.5" />
-                    )}
-                    AI Correct Spell
-                  </button>
-                </div>
+            <div className="flex flex-col space-y-3 h-full">
+              {/* Language Switcher Tabs */}
+              <div className="flex border-b border-slate-100 pb-1 flex-shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveEditTab('english')}
+                  className={`px-4 py-2 text-xs font-bold transition-all uppercase flex items-center gap-1.5 border-b-2 cursor-pointer ${
+                    activeEditTab === 'english'
+                      ? 'border-indigo-600 text-indigo-700 font-black'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  🇬🇧 English Source
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveEditTab('hindi')}
+                  className={`px-4 py-2 text-xs font-bold transition-all uppercase flex items-center gap-1.5 border-b-2 cursor-pointer ${
+                    activeEditTab === 'hindi'
+                      ? 'border-rose-600 text-rose-700 font-black'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  🇮🇳 Hindi Translation
+                </button>
               </div>
 
-              <textarea
-                required
-                value={rawLyrics}
-                onChange={(e) => setRawLyrics(e.target.value)}
-                placeholder="Paste song lyrics blocks here. Separate stanzas with double blank lines."
-                className="w-full flex-1 min-h-[280px] p-4 text-xs font-mono bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-2xl outline-none transition resize-none leading-relaxed"
-              />
+              {activeEditTab === 'english' ? (
+                <div className="flex flex-col space-y-2 flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
+                      English Lyrics Content
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleAIBeautify}
+                        disabled={isBeautifying || !rawLyrics.trim()}
+                        className="p-1 px-2.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-teal-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
+                        title="Structure lyrics into sections with bracket tags like [CHORUS] using AI"
+                      >
+                        {isBeautifying ? (
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-2.5 h-2.5" />
+                        )}
+                        AI Beautify
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleAICorrect}
+                        disabled={isCorrecting || !rawLyrics.trim()}
+                        className="p-1 px-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-amber-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
+                        title="Fix spelling, typos and typos while maintaining song context with AI"
+                      >
+                        {isCorrecting ? (
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-2.5 h-2.5" />
+                        )}
+                        AI Correct Spell
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    required
+                    value={rawLyrics}
+                    onChange={(e) => setRawLyrics(e.target.value)}
+                    placeholder="Paste English lyrics blocks here. Separate stanzas with double blank lines."
+                    className="w-full flex-1 min-h-[300px] p-4 text-xs font-mono bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-2xl outline-none transition resize-none leading-relaxed"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-2 flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
+                      Hindi Lyrics Content
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!rawLyrics.trim()) {
+                            alert("Please provide the English lyrics first so Gemini can analyze and translate them!");
+                            return;
+                          }
+                          setIsTranslatingEnglish(true);
+                          setError('');
+                          setInfoMsg('');
+                          try {
+                            const res = await fetch("/api/gemini/translate", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                rawLyrics: rawLyrics,
+                                songInfo: { title: title, artist: artist }
+                              })
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              if (data.success && data.formattedText) {
+                                setRawLyricsHindi(data.formattedText);
+                                setInfoMsg("Gemini translated the English lyrics and formatted them nicely!");
+                              } else {
+                                setError(data.error || "Failed translating to Hindi.");
+                              }
+                            }
+                          } catch (err) {
+                            setError("Error communicating with AI translation helper.");
+                          } finally {
+                            setIsTranslatingEnglish(false);
+                          }
+                        }}
+                        disabled={isTranslatingEnglish || !rawLyrics.trim()}
+                        className="p-1 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[9px] font-sans font-bold uppercase rounded-lg border border-rose-200 tracking-wider flex items-center gap-1 transition cursor-pointer"
+                        title="Translate the English lyrics into Hindi automatically using Gemini API"
+                      >
+                        {isTranslatingEnglish ? (
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-2.5 h-2.5" />
+                        )}
+                        AI Translate to Hindi
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={rawLyricsHindi}
+                    onChange={(e) => setRawLyricsHindi(e.target.value)}
+                    placeholder="Enter Hindi Devanagari lyrics or trigger 'AI Translate' helper above to convert dynamically..."
+                    className="w-full flex-1 min-h-[300px] p-4 text-xs font-mono bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-2xl outline-none transition resize-none leading-relaxed"
+                  />
+                </div>
+              )}
+              
               <p className="text-[9px] text-slate-400 font-mono italic">
-                Tip: Type double blank lines to separate stanzas. Insert tags like [Chorus] or [Verse 1] on their own line.
+                Tip: Divide stanzas using double blank lines. Place markers such as [Chorus] or [Verse 1] on their own line.
               </p>
             </div>
 

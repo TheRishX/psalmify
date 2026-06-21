@@ -46,6 +46,28 @@ export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }
       // Parse the raw lyrics on client side to format section list
       const formatted = parseRawLyrics(rawLyrics);
 
+      let resolvedCover = coverUrl.trim();
+      if (!resolvedCover) {
+        try {
+          const coverRes = await fetch("/api/gemini/generate-cover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: title.trim(), artist: artist.trim(), genre })
+          });
+          if (coverRes.ok) {
+            const coverData = await coverRes.json();
+            if (coverData.success && coverData.url) {
+              resolvedCover = coverData.url;
+            }
+          }
+        } catch (coverErr) {
+          console.warn("AI cover art generation exception, falling back to unsplash placeholder:", coverErr);
+        }
+      }
+      if (!resolvedCover) {
+        resolvedCover = "https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400&q=80";
+      }
+
       await addDoc(collection(db, "songs"), {
         title: title.trim(),
         artist: artist.trim(),
@@ -54,7 +76,7 @@ export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }
         duration: duration.trim() || "3:30",
         rawLyrics: rawLyrics,
         formattedLyrics: formatted,
-        coverUrl: coverUrl.trim() || null,
+        coverUrl: resolvedCover,
         youtubeUrl: youtubeUrl.trim() || null,
         status: 'pending', // Goes to moderation desk
         submittedBy: user.email,

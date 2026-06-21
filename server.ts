@@ -178,6 +178,117 @@ Return the corrected lyrics text directly. Do not include any chat summaries, ex
   }
 });
 
+// AI Translation / Devanagari Converter Endpoint
+app.post("/api/gemini/translate", async (req, res) => {
+  const { rawLyrics, songInfo } = req.body;
+  if (!rawLyrics || !rawLyrics.trim()) {
+    res.status(400).json({ error: "Lyrics content is required." });
+    return;
+  }
+
+  const ai = getGeminiClient();
+  if (!ai) {
+     res.json({
+       success: true,
+       formattedText: rawLyrics,
+       enrichment: "Offline mode: Translate requires an active API key.",
+       isSimulated: true
+     });
+     return;
+  }
+
+  try {
+    const prompt = `You are an expert bilingual lyric translator and songwriter.
+Translate the following song lyrics from English into poetic, beautiful, and sing-able Hindi (written in Devanagari script).
+Rules:
+- Format it with the exact same section block indicator tags like [INTRO], [VERSE 1], [CHORUS], [BRIDGE], [OUTRO] in brackets, written in uppercase.
+- Do NOT include any English lyrics in the output block, write ONLY the beautiful Hindi translation.
+- Preserve the exact layout of sections, paragraphs, and stanzas.
+
+Song Title: ${songInfo?.title || "Untitled"}
+Artist: ${songInfo?.artist || "Unknown"}
+
+ENGLISH LYRICS:
+${rawLyrics}
+
+Return the Hindi lyrics text directly. Do not include any notes, preambles, or markdown formatting (no chat dialogue, no markdown codeblocks, just the plain text of lyrics).`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt
+    });
+
+    res.json({
+      success: true,
+      formattedText: response.text || rawLyrics,
+      enrichment: "Successfully translated to Hindi using Gemini AI.",
+      isSimulated: false
+    });
+  } catch (err: any) {
+    console.error("Gemini translation error:", err);
+    res.status(500).json({ error: "AI translation failed: " + err.message });
+  }
+});
+
+// AI PowerPoint Slide Beautifier Endpoint
+app.post("/api/gemini/beautify-ppt", async (req, res) => {
+  const { title, artist, slides } = req.body;
+  if (!slides || !Array.isArray(slides)) {
+    res.status(400).json({ error: "Slides list is required." });
+    return;
+  }
+
+  const ai = getGeminiClient();
+  if (!ai) {
+    res.json({
+      success: true,
+      slides,
+      isSimulated: true
+    });
+    return;
+  }
+
+  try {
+    const prompt = `You are a professional PowerPoint slide, typography, and lyric-line presentation designer.
+Formulate and beautify this slideshow structure of the song "${title}" by "${artist}".
+Your goal is to optimize the lines of each slide, split overly long lines into poetic phrases, make sure no line is too long, and keep the text highly centered, impactful, and beautiful.
+
+Rules:
+- Output a valid JSON array of optimized slides matching this exact structural format:
+  [
+    { "title": "SLIDE TITLE", "category": "SLIDE SUBTITLE", "lines": ["Line 1", "Line 2", ...] }
+  ]
+- Do NOT alter the poetic meaning, but refine the layout and lines distribution for slides.
+- Put ONLY the JSON output, no markdowns, no backticks (no \`\`\`json block), just pure raw JSON string.
+
+INPUT SLIDES DATA:
+${JSON.stringify(slides, null, 2)}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt
+    });
+
+    try {
+      const cleanedText = (response.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
+      const beautifiedSlides = JSON.parse(cleanedText);
+      res.json({
+        success: true,
+        slides: beautifiedSlides
+      });
+    } catch (parseErr) {
+      console.warn("AI returned invalid JSON. Falling back to default slides.", response.text);
+      res.json({
+        success: true,
+        slides
+      });
+    }
+  } catch (err: any) {
+    console.error("Gemini PPT beautify error:", err);
+    res.status(500).json({ error: "AI PPT beautifier failed: " + err.message });
+  }
+});
+
 // AI 1:1 Album/Cover graphic generator or aesthetic Search fallback
 app.post("/api/gemini/generate-cover", async (req, res) => {
   const { title, artist, genre } = req.body;

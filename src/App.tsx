@@ -5,7 +5,7 @@ import SongLyricsView from './components/SongLyricsView';
 import AdminUploader from './components/AdminUploader';
 import { auth, db, googleProvider, OperationType, handleFirestoreError } from './utils/firebase';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, getDocs, setDoc, doc, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, setDoc, doc, limit, startAfter, orderBy } from 'firebase/firestore';
 import { parseRawLyrics } from './utils/lyricParser';
 import { DEFAULT_SONGS, DEFAULT_PLAYLISTS } from './data/defaultData';
 import { SubmitSongForm, SubmitPlaylistForm } from './components/SubmissionForms';
@@ -13,7 +13,8 @@ import {
   Music, Eye, Search, Sparkles, Sliders, Headphones, 
   Flame, CheckCircle, Disc, Info, ChevronRight, HelpCircle,
   PlusCircle, User, LogOut, ArrowRight, ShieldAlert, BadgeInfo,
-  Calendar, Layers, CheckCircle2, ChevronDown, ListPlus, X, ShieldAlert as AdminIcon
+  Calendar, Layers, CheckCircle2, ChevronDown, ListPlus, X, ShieldAlert as AdminIcon,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -26,6 +27,11 @@ export default function App() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Firestore cursor-based pagination states
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   
   // Public search filter states
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -117,21 +123,72 @@ export default function App() {
     localStorage.setItem('searchQuery', searchQuery);
   }, [searchQuery]);
 
-  // Real-time snapshot synchronized listeners
-  useEffect(() => {
-    // Listen to songs real-time snapshot (extracting approved catalog)
-    const qSongs = query(collection(db, "songs"), where("status", "==", "approved"));
-    const unsubSongs = onSnapshot(qSongs, (snapshot) => {
+  // Firestore cursor-based pagination loader helper
+  const SONGS_PER_PAGE = 8;
+
+  const loadInitialSongs = async () => {
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, "songs"),
+        where("status", "==", "approved"),
+        limit(SONGS_PER_PAGE)
+      );
+      const querySnapshot = await getDocs(q);
       const list: Song[] = [];
-      snapshot.forEach(docSnap => {
+      querySnapshot.forEach(docSnap => {
         list.push({ id: docSnap.id, ...docSnap.data() } as Song);
       });
       setSongs(list);
+      
+      const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+      setLastVisible(lastDoc);
+      setHasMore(querySnapshot.docs.length === SONGS_PER_PAGE);
+    } catch (error) {
+      console.error("Failed loading initial songs batch:", error);
+    } finally {
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, "songs");
-    });
+    }
+  };
 
+  const loadNextSongs = async () => {
+    if (!lastVisible || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const q = query(
+        collection(db, "songs"),
+        where("status", "==", "approved"),
+        startAfter(lastVisible),
+        limit(SONGS_PER_PAGE)
+      );
+      const querySnapshot = await getDocs(q);
+      const list: Song[] = [];
+      querySnapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Song);
+      });
+
+      if (list.length > 0) {
+        setSongs(prev => [...prev, ...list]);
+        const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+        setLastVisible(lastDoc);
+        setHasMore(querySnapshot.docs.length === SONGS_PER_PAGE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Failed loading subsequent song batch:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Load initial batch of songs on mount
+  useEffect(() => {
+    loadInitialSongs();
+  }, []);
+
+  // Real-time snapshot synchronized listeners for Playlists and Genres
+  useEffect(() => {
     // Listen to playlists real-time snapshot (extracting approved playlists)
     const qPlaylists = query(collection(db, "playlists"), where("status", "==", "approved"));
     const unsubPlaylists = onSnapshot(qPlaylists, (snapshot) => {
@@ -158,7 +215,6 @@ export default function App() {
     });
 
     return () => {
-      unsubSongs();
       unsubPlaylists();
       unsubGenres();
     };
@@ -257,21 +313,11 @@ export default function App() {
   const triggerReloadData = async () => {
     setLoading(true);
     try {
-      const snapSongs = await getDocs(query(collection(db, "songs"), where("status", "==", "approved"))).catch((error) => {
-        handleFirestoreError(error, OperationType.LIST, "songs");
-      });
+      await loadInitialSongs();
+      
       const snapPlaylists = await getDocs(query(collection(db, "playlists"), where("status", "==", "approved"))).catch((error) => {
         handleFirestoreError(error, OperationType.LIST, "playlists");
       });
-      
-      const sList: Song[] = [];
-      if (snapSongs) {
-        snapSongs.forEach(docSnap => {
-          sList.push({ id: docSnap.id, ...docSnap.data() } as Song);
-        });
-      }
-      setSongs(sList);
-
       const pList: Playlist[] = [];
       if (snapPlaylists) {
         snapPlaylists.forEach(docSnap => {
@@ -279,9 +325,8 @@ export default function App() {
         });
       }
       setPlaylists(pList);
-
     } catch (err) {
-      console.error(err);
+      console.error("Failed refreshing database entries:", err);
     } finally {
       setLoading(false);
     }
@@ -602,66 +647,91 @@ export default function App() {
                         <p className="text-slate-400">Try testing different keywords or clear your active genre filters.</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {filteredSongs.map((song) => {
-                          const isSelectedCard = activeSongId === song.id;
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {filteredSongs.map((song) => {
+                            const isSelectedCard = activeSongId === song.id;
 
-                          return (
-                            <motion.div
-                              key={song.id}
-                              id={`song-discover-card-${song.id}`}
-                              whileHover={{ y: -1.5 }}
-                              onClick={() => handleSelectSongFromList(song.id)}
-                              className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                                isSelectedCard 
-                                  ? 'bg-slate-50 border-rose-500 ring-1 ring-rose-500/20 shadow-sm' 
-                                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                
-                                {/* Track Cover Mini */}
-                                <div className="w-11 h-11 rounded-lg bg-slate-100 overflow-hidden border border-slate-150 flex-shrink-0">
-                                  <img
-                                    referrerPolicy="no-referrer"
-                                    src={song.coverUrl || 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600&auto=format&fit=crop'}
-                                    alt={song.title}
-                                    className="w-full h-full object-cover"
-                                  />
+                            return (
+                              <motion.div
+                                key={song.id}
+                                id={`song-discover-card-${song.id}`}
+                                whileHover={{ y: -1.5 }}
+                                onClick={() => handleSelectSongFromList(song.id)}
+                                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                                  isSelectedCard 
+                                    ? 'bg-slate-50 border-rose-500 ring-1 ring-rose-500/20 shadow-sm' 
+                                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  
+                                  {/* Track Cover Mini */}
+                                  <div className="w-11 h-11 rounded-lg bg-slate-100 overflow-hidden border border-slate-150 flex-shrink-0">
+                                    <img
+                                      referrerPolicy="no-referrer"
+                                      src={song.coverUrl || 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600&auto=format&fit=crop'}
+                                      alt={song.title}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+
+                                  <div className="flex-grow min-w-0">
+                                    <div className="flex justify-between items-start gap-2">
+                                      <h4 className="font-bold text-sm text-slate-905 truncate hover:text-rose-650 font-sans transition-colors">
+                                        {song.title}
+                                      </h4>
+                                      <span className="text-[9px] bg-slate-100 font-mono text-slate-550 px-1.5 py-0.5 rounded uppercase border border-slate-200">
+                                        {song.genre}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 truncate mt-0.5">{song.artist}</p>
+                                  </div>
                                 </div>
 
-                                <div className="flex-grow min-w-0">
-                                  <div className="flex justify-between items-start gap-2">
-                                    <h4 className="font-bold text-sm text-slate-905 truncate hover:text-rose-650 font-sans transition-colors">
-                                      {song.title}
-                                    </h4>
-                                    <span className="text-[9px] bg-slate-100 font-mono text-slate-550 px-1.5 py-0.5 rounded uppercase border border-slate-200">
-                                      {song.genre}
+                                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-slate-100 pt-3 mt-3">
+                                  <span className="flex items-center gap-1.5">
+                                    <Flame className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
+                                    Ready to view
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    {song.youtubeUrl && (
+                                      <span className="text-red-600 bg-red-50 px-1.5 py-0.5 border border-red-200/50 rounded text-[8px] font-bold">
+                                        MEDIA
+                                      </span>
+                                    )}
+                                    <span className="text-slate-700 font-bold flex items-center gap-0.5">
+                                      Open lyrics <ChevronRight className="w-3 h-3 text-slate-500" />
                                     </span>
                                   </div>
-                                  <p className="text-xs text-slate-500 truncate mt-0.5">{song.artist}</p>
                                 </div>
-                              </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
 
-                              <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-slate-100 pt-3 mt-3">
-                                <span className="flex items-center gap-1.5">
-                                  <Flame className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
-                                  Ready to view
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  {song.youtubeUrl && (
-                                    <span className="text-red-600 bg-red-50 px-1.5 py-0.5 border border-red-200/50 rounded text-[8px] font-bold">
-                                      MEDIA
-                                    </span>
-                                  )}
-                                  <span className="text-slate-700 font-bold flex items-center gap-0.5">
-                                    Open lyrics <ChevronRight className="w-3 h-3 text-slate-500" />
-                                  </span>
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
+                        {/* Interactive Pagination footer */}
+                        {hasMore && (
+                          <div className="flex items-center justify-center pt-4" id="catalog-cursor-pagination">
+                            <button
+                              onClick={loadNextSongs}
+                              disabled={loadingMore}
+                              className="px-6 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-700 shadow-xs hover:shadow-sm transition cursor-pointer flex items-center gap-2 disabled:opacity-40"
+                            >
+                              {loadingMore ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  Loading Tracks...
+                                </>
+                              ) : (
+                                <>
+                                  Load More Tracks
+                                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

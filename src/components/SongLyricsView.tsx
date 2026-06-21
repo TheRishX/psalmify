@@ -6,6 +6,9 @@ import {
   Minimize2, ZoomIn, ZoomOut, Copy, Download, Radio
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { db } from '../utils/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+import { parseRawLyrics } from '../utils/lyricParser';
 
 interface SongLyricsViewProps {
   song: Song;
@@ -24,6 +27,60 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
   const [lyricFontSize, setLyricFontSize] = useState<number>(20); // default 20px
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [autoScrollActive, setAutoScrollActive] = useState<boolean>(true);
+
+  // Bilingual translation & tabs management
+  const [lyricsLanguageTab, setLyricsLanguageTab] = useState<'english' | 'hindi'>('english');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [activeRawLyricsHindi, setActiveRawLyricsHindi] = useState(song.rawLyricsHindi || '');
+  const [activeFormattedLyricsHindi, setActiveFormattedLyricsHindi] = useState<FormattedSection[]>(song.formattedLyricsHindi || []);
+
+  useEffect(() => {
+    setActiveRawLyricsHindi(song.rawLyricsHindi || '');
+    setActiveFormattedLyricsHindi(song.formattedLyricsHindi || []);
+    setLyricsLanguageTab('english'); // Default back to English for any newly selected track
+  }, [song]);
+
+  const handleAITranslate = async () => {
+    setIsTranslating(true);
+    try {
+      const res = await fetch("/api/gemini/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rawLyrics: song.rawLyrics,
+          songInfo: { title: song.title, artist: song.artist }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.formattedText) {
+          const rawH = data.formattedText;
+          const parsedH = parseRawLyrics(rawH);
+          setActiveRawLyricsHindi(rawH);
+          setActiveFormattedLyricsHindi(parsedH);
+          setLyricsLanguageTab('hindi');
+          
+          // Persist the results inside Cloud Firestore automatically
+          try {
+            await updateDoc(doc(db, "songs", song.id), {
+              rawLyricsHindi: rawH,
+              formattedLyricsHindi: parsedH
+            });
+            console.log("Cached translation permanently inside Cloud Firestore!");
+          } catch (dbErr) {
+            console.warn("Could not write translation back to database:", dbErr);
+          }
+        } else {
+          alert(data.error || "Failed to generate Devanagari translation from Gemini.");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Network exception connecting to AI translator.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -66,8 +123,9 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
     
     // Pattern looking for [mm:ss] or [mm:ss.xx]
     const timeReg = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/;
+    const activeLyricsList = lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi;
 
-    song.formattedLyrics.forEach((sec, sIdx) => {
+    activeLyricsList.forEach((sec, sIdx) => {
       sec.lines.forEach((line, lIdx) => {
         const match = line.match(timeReg);
         let timeVal = -1;
@@ -76,7 +134,7 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
         if (match) {
           const m = parseInt(match[1], 10);
           const s = parseInt(match[2], 10);
-          const ms = match[3] ? parseInt(match[3], 10) / 100 : 0;
+          const ms = match[3] ? parseInt(match[3], 10) / 105 : 0;
           timeVal = (m * 60) + s + ms;
           cleanText = line.replace(timeReg, "").trim();
         }
@@ -105,7 +163,7 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
     }
 
     return list;
-  }, [song, totalSeconds]);
+  }, [song, totalSeconds, lyricsLanguageTab, activeFormattedLyricsHindi]);
 
   // Map simulated playback seconds to lyric lines
   useEffect(() => {
@@ -346,20 +404,15 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
             </div>
           </div>
 
-          {/* Timeline Bar Slider */}
+          {/* Timeline Bar Info Details (Progress music slider was removed for clarity as requested) */}
           <div className="space-y-1">
-            <input
-              type="range"
-              min="0"
-              max={totalSeconds}
-              value={currentTime}
-              onChange={handleProgressChange}
-              className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-slate-900 hover:bg-slate-200 transition-all"
-            />
-            <div className="flex justify-between text-[11px] font-mono text-slate-400">
-              <span>{formatSeconds(currentTime)}</span>
-              <span className="font-bold text-slate-500">Auto-Scroll {autoScrollActive ? 'ON' : 'OFF'}</span>
-              <span>{formatSeconds(totalSeconds)}</span>
+            <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-100">
+              <span className="font-semibold text-slate-600">Playback Elapsed: {formatSeconds(currentTime)}</span>
+              <span className="font-bold text-rose-600 flex items-center gap-1.5 animate-pulse bg-rose-50/50 border border-rose-100 px-2.5 py-0.5 rounded-full text-[9px] uppercase">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                {autoScrollActive ? 'Auto-Scrolling Active' : 'Scrolling Standby'}
+              </span>
+              <span className="font-semibold text-slate-600">Total Length: {formatSeconds(totalSeconds)}</span>
             </div>
           </div>
 
@@ -424,7 +477,7 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                   <span className="text-[9px] text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded bg-slate-50 font-bold">MONOSPACE</span>
                 </div>
                 <pre className="whitespace-pre-wrap leading-relaxed max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-                  {song.rawLyrics}
+                  {lyricsLanguageTab === 'english' ? song.rawLyrics : activeRawLyricsHindi || "No Hindi translations available."}
                 </pre>
               </motion.div>
             ) : (
@@ -436,107 +489,165 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                 exit={{ opacity: 0 }}
                 className="space-y-6"
               >
-                <div className="text-center mb-8">
-                  <h2 className="text-3xl font-serif font-light mb-1.5 text-slate-900">{song.title}</h2>
+                <div className="text-center mb-4">
+                  <h2 className="text-2xl md:text-3xl font-serif font-black mb-1 text-slate-900 tracking-tight">{song.title}</h2>
                   <p className="text-xs text-slate-400 tracking-[0.2em] font-sans uppercase">BY {song.artist}</p>
                 </div>
 
-                {song.formattedLyrics.map((section, sIdx) => {
-                  const isChorus = section.type === 'chorus';
-                  const isBridge = section.type === 'bridge';
-                  const isHook = section.type === 'hook';
-                  const isIntro = section.type === 'intro' || section.type === 'outro';
-                  const isSectionActive = activeSectionIndex === sIdx;
+                {/* Elegant Dual-Language Tab Selectors with micro-interactions */}
+                <div className="flex justify-center gap-2.5 pb-4 border-b border-slate-100">
+                  <button
+                    onClick={() => setLyricsLanguageTab('english')}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase flex items-center gap-2 cursor-pointer ${
+                      lyricsLanguageTab === 'english'
+                        ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10 scale-105'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
+                    }`}
+                  >
+                    🇬🇧 English Default
+                  </button>
 
-                  // CSS classes for various sections
-                  let containerClass = "relative rounded-xl border transition-all duration-300 p-5 ";
-                  let headerClass = "text-[10px] font-bold tracking-wider font-mono mb-3 uppercase flex items-center justify-between ";
-                  let lineClass = "leading-relaxed tracking-wide transition-all duration-200 ";
+                  <button
+                    onClick={() => setLyricsLanguageTab('hindi')}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase flex items-center gap-2 cursor-pointer ${
+                      lyricsLanguageTab === 'hindi'
+                        ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/10 scale-105'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
+                    }`}
+                  >
+                    🇮🇳 Hindi Version (हिंदी)
+                  </button>
+                </div>
 
-                  if (isChorus) {
-                    containerClass += isSectionActive
-                      ? "bg-rose-50/50 border-rose-300 shadow-sm " 
-                      : "bg-rose-50/20 border-rose-100 hover:border-rose-200 ";
-                    containerClass += "border-l-4 border-l-rose-500 pl-5";
-                    headerClass += "text-rose-650";
-                    lineClass += "italic font-serif font-semibold text-slate-900 ";
-                  } else if (isBridge || isHook) {
-                    containerClass += isSectionActive
-                      ? "bg-amber-50/50 border-amber-300 shadow-sm "
-                      : "bg-amber-50/10 border-amber-100 hover:border-amber-200 ";
-                    containerClass += "border-l-4 border-l-amber-500 pl-5";
-                    headerClass += "text-amber-700";
-                    lineClass += "font-serif italic text-slate-900 ";
-                  } else if (isIntro) {
-                    containerClass += "bg-slate-50 border-slate-100 border-l-4 border-l-slate-300 pl-5 ";
-                    headerClass += "text-slate-400";
-                    lineClass += "text-slate-500 font-mono ";
-                  } else {
-                    // Standard Stanzas / Verses
-                    containerClass += isSectionActive
-                      ? "bg-slate-50/70 border-slate-300 "
-                      : "bg-transparent border-transparent hover:border-slate-100/80 ";
-                    containerClass += "border-l-4 border-l-slate-200 pl-5";
-                    headerClass += "text-slate-400";
-                    lineClass += "text-slate-800 font-sans ";
-                  }
-
-                  return (
-                    <motion.div
-                      key={sIdx}
-                      id={`lyric-section-${sIdx}`}
-                      className={containerClass}
-                      layout
+                {lyricsLanguageTab === 'hindi' && activeFormattedLyricsHindi.length === 0 ? (
+                  <div className="bg-gradient-to-br from-rose-50/50 to-amber-50/30 border border-rose-100 rounded-3xl p-8 text-center max-w-md mx-auto space-y-4 shadow-sm my-8">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-600 mx-auto shadow-sm">
+                      <Sparkles className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 leading-tight">Hindi lyrics have not been synced yet</h4>
+                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                        No translation is configured for this song. Tap to invoke the Gemini API to analyze and translate the lyrics to Devanagari Hindi instantly!
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleAITranslate}
+                      disabled={isTranslating}
+                      className="w-full py-3 bg-rose-600 hover:bg-rose-500 disabled:opacity-55 text-white text-xs font-bold font-sans tracking-wide rounded-2xl transition shadow-lg shadow-rose-600/10 flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      {/* Quote indicator */}
-                      {isChorus && (
-                        <div className="absolute top-4 right-4 text-rose-205/20 opacity-30 pointer-events-none">
-                          <svg className="w-8 h-8 text-rose-200" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21L14.017 18C14.017 16.8954 14.9124 16 16.017 16H19.017C20.1216 16 21.017 16.8954 21.017 18V21C21.017 22.1046 20.1216 23 19.017 23H16.017C14.9124 23 14.017 22.1046 14.017 21ZM5.017 21L5.017 18C5.017 16.8954 5.91243 16 7.017 16H10.017C11.1216 16 12.017 16.8954 12.017 18V21C12.017 22.1046 11.1216 23 10.017 23H7.017C5.91243 23 5.017 22.1046 5.017 21Z"></path></svg>
-                        </div>
+                      {isTranslating ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>AI generating translation...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 text-white" />
+                          <span>Generate Devanagari Translation with AI</span>
+                        </>
                       )}
+                    </button>
+                  </div>
+                ) : (
+                  (lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi).map((section, sIdx) => {
+                    const isChorus = section.type === 'chorus';
+                    const isBridge = section.type === 'bridge';
+                    const isHook = section.type === 'hook';
+                    const isIntro = section.type === 'intro' || section.type === 'outro';
+                    const isSectionActive = activeSectionIndex === sIdx;
 
-                      <div className={headerClass}>
-                        <div className="flex items-center gap-1.5 font-bold">
-                          {isChorus && <Sparkles className="w-3.5 h-3.5 text-rose-500" />}
-                          <span>{section.label}</span>
-                        </div>
-                        {isSectionActive && (
-                          <span className="text-[8px] font-mono bg-slate-900 text-white font-bold px-1.5 py-0.5 rounded leading-none shadow-sm">
-                            Sing Along Highlight
-                          </span>
+                    // BEAUTIFUL HIGH-CONTRAST HIGHLIGHTS FOR DIFFERENT BLOCK TYPES
+                    let containerClass = "relative rounded-xl border transition-all duration-300 p-5 ";
+                    let headerClass = "text-[10px] font-bold tracking-wider font-mono mb-3 uppercase flex items-center justify-between ";
+                    let lineClass = "leading-relaxed tracking-wide transition-all duration-200 ";
+
+                    if (isChorus) {
+                      containerClass += isSectionActive
+                        ? "bg-emerald-50 border-emerald-300 shadow-md ring-2 ring-emerald-500/10 " 
+                        : "bg-emerald-50/10 border-emerald-100 hover:border-emerald-200 hover:bg-emerald-50/20 ";
+                      containerClass += "border-l-4 border-l-emerald-500 pl-5";
+                      headerClass += "text-emerald-700";
+                      lineClass += "italic font-semibold text-slate-900 ";
+                    } else if (isBridge || isHook) {
+                      containerClass += isSectionActive
+                        ? "bg-amber-50/60 border-amber-300 shadow-md ring-2 ring-amber-500/10 "
+                        : "bg-amber-50/10 border-amber-100 hover:border-amber-250/50 hover:bg-amber-50/20 ";
+                      containerClass += "border-l-4 border-l-amber-500 pl-5";
+                      headerClass += "text-amber-850";
+                      lineClass += "font-serif italic text-slate-900 ";
+                    } else if (isIntro) {
+                      containerClass += "bg-slate-50 border-slate-100 border-l-4 border-l-slate-300 pl-5 ";
+                      headerClass += "text-slate-400";
+                      lineClass += "text-slate-500 font-mono ";
+                    } else {
+                      // Standard Stanzas / Verses (Soft Elegant Violet Palette)
+                      containerClass += isSectionActive
+                        ? "bg-violet-50/80 border-violet-300 shadow-md ring-2 ring-violet-500/10 "
+                        : "bg-violet-50/10 border-violet-100/70 hover:border-violet-200 hover:bg-violet-50/20 ";
+                      containerClass += "border-l-4 border-l-violet-400 pl-5";
+                      headerClass += "text-violet-700";
+                      lineClass += "text-slate-800 font-sans ";
+                    }
+
+                    return (
+                      <motion.div
+                        key={sIdx}
+                        id={`lyric-section-${sIdx}`}
+                        className={containerClass}
+                        layout
+                      >
+                        {/* Quote decoration */}
+                        {isChorus && (
+                          <div className="absolute top-4 right-4 text-emerald-200 opacity-20 pointer-events-none">
+                            <svg className="w-8 h-8 text-emerald-500" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21L14.017 18C14.017 16.8954 14.9124 16 16.017 16H19.017C20.1216 16 21.017 16.8954 21.017 18V21C21.017 22.1046 20.1216 23 19.017 23H16.017C14.9124 23 14.017 22.1046 14.017 21ZM5.017 21L5.017 18C5.017 16.8954 5.91243 16 7.017 16H10.017C11.1216 16 12.017 16.8954 12.017 18V21C12.017 22.1046 11.1216 23 10.017 23H7.017C5.91243 23 5.017 22.1046 5.017 21Z"></path></svg>
+                          </div>
                         )}
-                      </div>
 
-                      <div className="space-y-2">
-                        {section.lines.map((line, lIdx) => {
-                          // Find out the exact global line index
-                          let globalLineIdx = 0;
-                          for (let i = 0; i < sIdx; i++) {
-                            globalLineIdx += song.formattedLyrics[i].lines.length;
-                          }
-                          globalLineIdx += lIdx;
+                        <div className={headerClass}>
+                          <div className="flex items-center gap-1.5 font-bold">
+                            {isChorus && <Sparkles className="w-3.5 h-3.5 text-emerald-500" />}
+                            {!isChorus && <Music className="w-3.5 h-3.5 text-violet-400" />}
+                            <span>{section.label}</span>
+                          </div>
+                          {isSectionActive && (
+                            <span className="text-[8px] font-mono bg-slate-900 text-white font-bold px-1.5 py-0.5 rounded leading-none shadow-sm flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping" />
+                              TRACKER HIGHLIGHT
+                            </span>
+                          )}
+                        </div>
 
-                          const isLineActive = activeLineIndex === globalLineIdx;
+                        <div className="space-y-2">
+                          {section.lines.map((line, lIdx) => {
+                            const activeLyricsList = lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi;
+                            let globalLineIdx = 0;
+                            for (let i = 0; i < sIdx; i++) {
+                              globalLineIdx += activeLyricsList[i].lines.length;
+                            }
+                            globalLineIdx += lIdx;
 
-                          return (
-                            <p
-                              key={lIdx}
-                              id={`lyric-line-global-${globalLineIdx}`}
-                              style={{ fontSize: `${lyricFontSize}px` }}
-                              className={`${lineClass} ${
-                                isLineActive 
-                                  ? 'text-amber-800 bg-amber-100/80 px-2 py-1 rounded-lg border-l-2 border-l-amber-500 scale-[1.01] font-bold shadow-sm' 
-                                  : 'opacity-90'
-                              }`}
-                            >
-                              {line}
-                            </p>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                            const isLineActive = activeLineIndex === globalLineIdx;
+
+                            return (
+                              <p
+                                key={lIdx}
+                                id={`lyric-line-global-${globalLineIdx}`}
+                                style={{ fontSize: `${lyricFontSize}px` }}
+                                className={`${lineClass} ${
+                                  isLineActive 
+                                    ? 'text-amber-900 bg-amber-50 px-2.5 py-1.5 rounded-xl border-l-2 border-l-amber-500 scale-[1.01] font-bold shadow-sm' 
+                                    : 'opacity-90'
+                                }`}
+                              >
+                                {line}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -648,7 +759,7 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
 
               {/* Readable Lyrics Blocks */}
               <div className="space-y-8 pt-4">
-                {song.formattedLyrics.map((section, sIdx) => {
+                {(lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi).map((section, sIdx) => {
                   const isChorus = section.type === 'chorus';
                   const isBridge = section.type === 'bridge';
                   const isHook = section.type === 'hook';
@@ -660,11 +771,11 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
 
                   if (isChorus) {
                     containerStyles += isSectionActive 
-                      ? "bg-rose-50 border-rose-300 ring-2 ring-rose-500/10 shadow-sm " 
-                      : "bg-white border-rose-100/80 ";
-                    containerStyles += "border-l-8 border-l-rose-500 pl-8";
-                    headerStyles += "text-rose-600";
-                    lineStyles += "font-serif italic font-bold text-slate-905 ";
+                      ? "bg-emerald-50 border-emerald-300 ring-2 ring-emerald-500/10 shadow-sm " 
+                      : "bg-white border-emerald-100/80 ";
+                    containerStyles += "border-l-8 border-l-emerald-500 pl-8";
+                    headerStyles += "text-emerald-600";
+                    lineStyles += "italic font-bold text-slate-905 ";
                   } else if (isBridge || isHook) {
                     containerStyles += isSectionActive 
                       ? "bg-amber-50 border-amber-300 ring-2 ring-amber-500/10 shadow-sm " 
@@ -674,10 +785,10 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                     lineStyles += "font-serif italic text-slate-905 ";
                   } else {
                     containerStyles += isSectionActive 
-                      ? "bg-slate-100 border-slate-300 shadow-sm " 
-                      : "bg-white border-slate-200 ";
-                    containerStyles += "border-l-8 border-l-slate-300 pl-8";
-                    headerStyles += "text-slate-400";
+                      ? "bg-violet-50 border-violet-300 shadow-sm pr-8 " 
+                      : "bg-white border-violet-150/50 ";
+                    containerStyles += "border-l-8 border-l-violet-400 pl-8";
+                    headerStyles += "text-violet-500";
                     lineStyles += "font-sans text-slate-800 ";
                   }
 
@@ -689,9 +800,10 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
 
                       <div className="space-y-3">
                         {section.lines.map((line, lIdx) => {
+                          const activeLyricsList = lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi;
                           let globalLineIdx = 0;
                           for (let i = 0; i < sIdx; i++) {
-                            globalLineIdx += song.formattedLyrics[i].lines.length;
+                            globalLineIdx += activeLyricsList[i].lines.length;
                           }
                           globalLineIdx += lIdx;
 

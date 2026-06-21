@@ -6,6 +6,8 @@ export interface Song {
   genre: string;
   rawLyrics: string;
   formattedLyrics: FormattedSection[];
+  rawLyricsHindi?: string;
+  formattedLyricsHindi?: FormattedSection[];
   youtubeUrl?: string;
   coverUrl?: string;
   duration?: string;
