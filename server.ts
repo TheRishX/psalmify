@@ -276,7 +276,7 @@ Return the Hindi lyrics text directly. Do not include any notes, preambles, or m
   }
 });
 
-// AI PowerPoint Slide Beautifier Endpoint
+// AI PowerPoint Slide Beautifier Endpoint (with Sentiment-based Theme Tuning)
 app.post("/api/gemini/beautify-ppt", async (req, res) => {
   const { title, artist, slides } = req.body;
   if (!slides || !Array.isArray(slides)) {
@@ -284,28 +284,153 @@ app.post("/api/gemini/beautify-ppt", async (req, res) => {
     return;
   }
 
+  // Pre-bake an offline semantic analyzer in case Gemini client isn't available
+  const generateSimulatedTheme = (songTitle: string, allLyrics: string) => {
+    const textSample = (songTitle + " " + allLyrics).toLowerCase();
+    
+    if (
+      textSample.includes("joy") || 
+      textSample.includes("sing") || 
+      textSample.includes("rejoice") || 
+      textSample.includes("praise") || 
+      textSample.includes("celebrate") || 
+      textSample.includes("hallelu") || 
+      textSample.includes("vibrant") ||
+      textSample.includes("glad")
+    ) {
+      return {
+        detectedSentiment: "Joyful / Celebratory",
+        explanation: "Offline analysis detected uplifting and joyful keywords. Applied a warm ivory background with deep charcoal text and radiant yellow-amber accents, featuring friendly Poppins-like Georgia/Arial serif typography.",
+        bgStr: "#FFFDF6",
+        textColor: "#1A1A18",
+        accentColor: "#D97706",
+        fontFace: "Arial",
+        pptBg: "FFFDF6",
+        pptText: "1A1A18",
+        pptAccent: "D97706"
+      };
+    } else if (
+      textSample.includes("peace") || 
+      textSample.includes("still") || 
+      textSample.includes("rest") || 
+      textSample.includes("quiet") || 
+      textSample.includes("shepherd") || 
+      textSample.includes("calm") || 
+      textSample.includes("gentle")
+    ) {
+      return {
+        detectedSentiment: "Meditative / Serene",
+        explanation: "Offline analyzer matched calming themes of peace and rest. Prepared a serene deep evergreen atmosphere with pale mint elements and sophisticated Lucida Sans typography.",
+        bgStr: "#062419",
+        textColor: "#ECFDF5",
+        accentColor: "#34D399",
+        fontFace: "Lucida Sans Unicode",
+        pptBg: "062419",
+        pptText: "ECFDF5",
+        pptAccent: "34D399"
+      };
+    } else if (
+      textSample.includes("cross") || 
+      textSample.includes("blood") || 
+      textSample.includes("grave") || 
+      textSample.includes("solemn") || 
+      textSample.includes("holy") || 
+      textSample.includes("broken") || 
+      textSample.includes("sacrifice")
+    ) {
+      return {
+        detectedSentiment: "Solemn / Reverent",
+        explanation: "Offline matching resolved traditional, deep reverent terms. Configured a majestic deep charcoal base with royal gold accents and literary Georgia Serif fonts.",
+        bgStr: "#111827",
+        textColor: "#F9FAFB",
+        accentColor: "#F59E0B",
+        fontFace: "Georgia",
+        pptBg: "111827",
+        pptText: "F9FAFB",
+        pptAccent: "F59E0B"
+      };
+    } else if (
+      textSample.includes("hope") || 
+      textSample.includes("promise") || 
+      textSample.includes("morning") || 
+      textSample.includes("light") || 
+      textSample.includes("sunrise") || 
+      textSample.includes("future")
+    ) {
+      return {
+        detectedSentiment: "Hopeful / Uplifting",
+        explanation: "Offline analysis identified brilliant keywords of light, hope, and morning. Applied a cool dawn blue palette with sparkling sky highlights and clean Arial typography.",
+        bgStr: "#0F1E36",
+        textColor: "#F1F5F9",
+        accentColor: "#38BDF8",
+        fontFace: "Trebuchet MS",
+        pptBg: "0F1E36",
+        pptText: "F1F5F9",
+        pptAccent: "38BDF8"
+      };
+    } else {
+      // Default: Cosmic Modern
+      return {
+        detectedSentiment: "Modern / Contemporary",
+        explanation: "Applied a modern, high-contrast, deeply legible dark cosmic slate theme paired with crisp electric aqua features and sleek Arial styles.",
+        bgStr: "#0B0F19",
+        textColor: "#F3F4F6",
+        accentColor: "#06B6D4",
+        fontFace: "Arial",
+        pptBg: "0B0F19",
+        pptText: "F3F4F6",
+        pptAccent: "06B6D4"
+      };
+    }
+  };
+
+  const getFullText = () => {
+    return slides.map(s => (s.lines || []).join(" ")).join(" ");
+  };
+
   const ai = getGeminiClient();
   if (!ai) {
+    const offlineTheme = generateSimulatedTheme(title || "", getFullText());
     res.json({
       success: true,
       slides,
+      theme: offlineTheme,
       isSimulated: true
     });
     return;
   }
 
   try {
-    const prompt = `You are a professional PowerPoint slide, typography, and lyric-line presentation designer.
-Formulate and beautify this slideshow structure of the song "${title}" by "${artist}".
-Your goal is to optimize the lines of each slide, split overly long lines into poetic phrases, make sure no line is too long, and keep the text highly centered, impactful, and beautiful.
+    const prompt = `You are an elite PowerPoint presentation architect and thematic lyric artist.
+Your objective is to:
+1. Optimize the lyrics on each slide. Split overly long lines of lyrics into brief, poetic, highly readable phrases, ensuring no single line overflows standard horizontal layouts, keeping slides uncluttered and centered.
+2. Analyze the following lyrics text for emotional sentiment (e.g., joyful/celebratory, solemn/reverent, hopeful/uplifting, energetic/vibrant, meditative/serene).
+3. Automatically generate a beautiful custom slide theme (background color, text color, accent highlight color) matching that exact sentiment, alongside choosing the most appropriate font style (such as Georgia, Arial, Trebuchet MS, Lucida Sans Unicode, Courier New, Times New Roman, Garamond).
 
-Rules:
-- Output a valid JSON array of optimized slides matching this exact structural format:
-  [
+Below are background/accent recommendation maps across core sentiments:
+- Joyful / Celebratory: Radiant light backgrounds (e.g., soft warm cream, peach canvas, amber haze), deep charcoal text, bright red-orange or yellow-gold accent highlights. Optimal fonts: Arial, Trebuchet MS.
+- Solemn / Reverent: Majestic dark backgrounds (e.g., deep graphite, midnight steel, royal bronze), soft silver/white text, warm old gold or burgundy accents. Optimal fonts: Georgia, Times New Roman, Garamond.
+- Hopeful / Serene: Cool sunrise backgrounds (e.g., soft sky blue, calm sage teal, lavender mist), clear high-contrast slate text, pure silver-gold or vivid teal highlights. Optimal fonts: Lucida Sans Unicode, Arial.
+- Energetic / Vibrant: Dynamic night backgrounds (e.g., violet twilight, piano black, electric navy), glowing pure-white text, hot pink, vivid neon cyan or bright lime highlights. Optimal font: Courier New, Trebuchet MS.
+- Meditative / Peaceful: Quiet nature backgrounds (e.g., deep emerald, charcoal-forest, warm oatmeal linen), pale text, soft sage or warm rose accents. Optimal font: Georgia, Lucida Sans.
+
+Output MUST be a single raw JSON block matching this exact structural format (do NOT wrap inside markdown backticks or \`\`\`json tags, start with { and end with }):
+{
+  "slides": [
     { "title": "SLIDE TITLE", "category": "SLIDE SUBTITLE", "lines": ["Line 1", "Line 2", ...] }
-  ]
-- Do NOT alter the poetic meaning, but refine the layout and lines distribution for slides.
-- Put ONLY the JSON output, no markdowns, no backticks (no \`\`\`json block), just pure raw JSON string.
+  ],
+  "theme": {
+    "detectedSentiment": "Capitalized Sentiment Name (e.g. Solemn / Reverent)",
+    "explanation": "A concise, beautiful sentence explaining how the visual palette choice echoes the emotional soul of the song.",
+    "bgStr": "String HEX background starting with hash, e.g. #0B0F19",
+    "textColor": "String HEX text starting with hash, e.g. #F3F4F6",
+    "accentColor": "String HEX accent starting with hash, e.g. #38BDF8",
+    "fontFace": "One matching font family string (e.g. Georgia, Arial, Trebuchet MS, Lucida Sans Unicode, Courier New)",
+    "pptBg": "String HEX background WITHOUT hash, e.g. 0B0F19",
+    "pptText": "String HEX text WITHOUT hash, e.g. F3F4F6",
+    "pptAccent": "String HEX accent WITHOUT hash, e.g. 38BDF8"
+  }
+}
 
 INPUT SLIDES DATA:
 ${JSON.stringify(slides, null, 2)}`;
@@ -316,17 +441,26 @@ ${JSON.stringify(slides, null, 2)}`;
     });
 
     try {
-      const cleanedText = (response.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
-      const beautifiedSlides = JSON.parse(cleanedText);
-      res.json({
-        success: true,
-        slides: beautifiedSlides
-      });
+      const cleanedText = cleanMarkdownBlocks(response.text || "").trim();
+      const resultObj = JSON.parse(cleanedText);
+      
+      if (resultObj && Array.isArray(resultObj.slides) && resultObj.theme) {
+        res.json({
+          success: true,
+          slides: resultObj.slides,
+          theme: resultObj.theme
+        });
+      } else {
+        throw new Error("Missing essential slide or theme structures in Gemini response.");
+      }
     } catch (parseErr) {
-      console.warn("AI returned invalid JSON. Falling back to default slides.", response.text);
+      console.warn("AI returned raw or invalid JSON formats. Falling back to offline analyzer:", response.text);
+      const offlineTheme = generateSimulatedTheme(title || "", getFullText());
       res.json({
         success: true,
-        slides
+        slides,
+        theme: offlineTheme,
+        isSimulated: true
       });
     }
   } catch (err: any) {

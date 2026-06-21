@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Song, FormattedSection } from '../types';
 import { 
   X, Presentation, Download, Play, ChevronLeft, ChevronRight, 
-  Settings, Layout, Type, Palette, MonitorCheck, Maximize2, Minimize2 
+  Settings, Layout, Type, Palette, MonitorCheck, Maximize2, Minimize2,
+  Sparkles, Loader2, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pptxgen from 'pptxgenjs';
@@ -12,7 +13,7 @@ interface PPTGeneratorProps {
   onClose: () => void;
 }
 
-type PPTThemeId = 'cosmic-dark' | 'midnight-onyx' | 'vintage-serif' | 'emerald-worship' | 'neon-aurora';
+type PPTThemeId = 'cosmic-dark' | 'midnight-onyx' | 'vintage-serif' | 'emerald-worship' | 'neon-aurora' | 'ai-custom';
 
 interface PPTThemeConfig {
   id: PPTThemeId;
@@ -90,10 +91,21 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
 
-  const activeTheme = THEMES.find(t => t.id === selectedThemeId) || THEMES[0];
+  // States for the AI sentiment beautifier
+  const [customAITheme, setCustomAITheme] = useState<PPTThemeConfig | null>(null);
+  const [isBeautifying, setIsBeautifying] = useState<boolean>(false);
+  const [beautifiedSlides, setBeautifiedSlides] = useState<any[] | null>(null);
+  const [aiExplanation, setAiExplanation] = useState<string>('');
+
+  const allAvailableThemes = customAITheme ? [...THEMES, customAITheme] : THEMES;
+  const activeTheme = allAvailableThemes.find(t => t.id === selectedThemeId) || THEMES[0];
 
   // Logic to build slides from stanzas
   const slides = React.useMemo(() => {
+    if (beautifiedSlides && beautifiedSlides.length > 0) {
+      return beautifiedSlides;
+    }
+
     const list: { title: string; category: string; lines: string[] }[] = [];
     
     // Slide 0: Title Slide
@@ -104,7 +116,11 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
     });
 
     // Slides for each stanza block
-    song.formattedLyrics.forEach((section) => {
+    const langLyrics = song.formattedLyrics && song.formattedLyrics.length > 0
+      ? song.formattedLyrics
+      : (song.formattedLyricsHindi || []);
+
+    langLyrics.forEach((section) => {
       list.push({
         title: section.label.toUpperCase(),
         category: `WORDS BY ${song.artist.toUpperCase()}`,
@@ -120,7 +136,82 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
     });
 
     return list;
-  }, [song]);
+  }, [song, beautifiedSlides]);
+
+  const handleAIBeautify = async () => {
+    setIsBeautifying(true);
+    try {
+      // Form initial draft presentation structures for input
+      const defaultSlides = [
+        {
+          title: song.title.toUpperCase(),
+          category: `WORDS BY ${song.artist.toUpperCase()}`,
+          lines: song.album ? [`ALBUM: ${song.album.toUpperCase()}`, `CATEGORY: ${song.genre.toUpperCase()}`] : [`CATEGORY: ${song.genre.toUpperCase()}`]
+        },
+        ...(song.formattedLyrics && song.formattedLyrics.length > 0 ? song.formattedLyrics : song.formattedLyricsHindi || []).map(section => ({
+          title: section.label.toUpperCase(),
+          category: `WORDS BY ${song.artist.toUpperCase()}`,
+          lines: section.lines
+        })),
+        {
+          title: "THANK YOU",
+          category: "SMART LYRICS PRESENTATIONS ENGINE",
+          lines: ["Praise & Worship Directory", "Powered by Google Cloud & Firestore"]
+        }
+      ];
+
+      const res = await fetch("/api/gemini/beautify-ppt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: song.title,
+          artist: song.artist,
+          slides: defaultSlides
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.theme && data.slides) {
+          const aiTheme: PPTThemeConfig = {
+            id: 'ai-custom',
+            name: `AI: ${data.theme.detectedSentiment}`,
+            bgStr: data.theme.bgStr || '#1e293b',
+            textColor: data.theme.textColor || '#f8fafc',
+            accentColor: data.theme.accentColor || '#38bdf8',
+            fontFace: data.theme.fontFace || 'Arial',
+            pptBg: data.theme.pptBg || '1E293B',
+            pptText: data.theme.pptText || 'F8FAFC',
+            pptAccent: data.theme.pptAccent || '38BDF8'
+          };
+          setCustomAITheme(aiTheme);
+          setBeautifiedSlides(data.slides);
+          setAiExplanation(data.theme.explanation || '');
+          setSelectedThemeId('ai-custom');
+          setActiveSlideIndex(0);
+        } else {
+          alert("Could not process presentation theme recommendation. Try again.");
+        }
+      } else {
+        alert("The AI PowerPoint beautification service returned an error status.");
+      }
+    } catch (err) {
+      console.error("Failed AI presentation beautification:", err);
+      alert("Network or service exception occurred during PowerPoint beautification.");
+    } finally {
+      setIsBeautifying(false);
+    }
+  };
+
+  const handleResetAITheme = () => {
+    setCustomAITheme(null);
+    setBeautifiedSlides(null);
+    setAiExplanation('');
+    setSelectedThemeId('cosmic-dark');
+    setActiveSlideIndex(0);
+  };
 
   // Handle key listeners for slide switching of presentation
   useEffect(() => {
@@ -374,6 +465,71 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
         {!isFullScreen && (
           <div className="w-full lg:w-80 space-y-6 flex-shrink-0">
             
+            {/* AI PPT Beautifier Tool */}
+            <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2 text-rose-400">
+                  <Sparkles className="w-4 h-4 animate-pulse" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider">AI PPT Beautifier</h4>
+                </div>
+                {customAITheme && (
+                  <span className="text-[9px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full font-mono font-bold animate-pulse">
+                    Active
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-[11px] text-slate-400 leading-relaxed font-mono">
+                  Let Gemini analyze the track lyrics for emotional sentiment, automatically generate matching background layouts, select custom typography, and optimize bullet split points.
+                </p>
+
+                {aiExplanation && (
+                  <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-3 space-y-1">
+                    <p className="text-[10px] font-bold text-rose-400 flex items-center gap-1.5">
+                      <span>Sentiment:</span>
+                      <span className="bg-rose-500/10 text-rose-300 px-1.5 py-0.5 rounded uppercase font-mono tracking-wide text-[9px]">
+                        {customAITheme?.name.replace("AI: ", "")}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-slate-300 leading-relaxed italic">
+                      "{aiExplanation}"
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleAIBeautify}
+                  disabled={isBeautifying}
+                  className="w-full py-2.5 bg-gradient-to-r from-rose-500 to-indigo-600 hover:from-rose-400 hover:to-indigo-505 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-rose-500/10"
+                >
+                  {isBeautifying ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Analyzing Theme & Tone...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{customAITheme ? 'Run AI Analysis Again' : 'Beautify Slides with AI'}</span>
+                    </>
+                  )}
+                </button>
+
+                {customAITheme && (
+                  <button
+                    type="button"
+                    onClick={handleResetAITheme}
+                    className="w-full py-2 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-xl text-[10px] font-mono transition inline-flex items-center justify-center gap-1.5 cursor-pointer bg-slate-950/20"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset to Classic Styles
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Theme designer panel */}
             <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-2 text-indigo-400 border-b border-slate-800 pb-3">
@@ -385,7 +541,7 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
                 <p className="text-[11px] text-slate-400 font-mono">Choose a typography and visual background style:</p>
                 
                 <div className="space-y-1.5">
-                  {THEMES.map((theme) => {
+                  {allAvailableThemes.map((theme) => {
                     const isSel = theme.id === selectedThemeId;
                     return (
                       <button
