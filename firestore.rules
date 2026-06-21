@@ -35,5 +35,11 @@ service cloud.firestore {
       allow read: if true; // anyone can list genres
       allow create, update, delete: if isAuthenticated() || (request.resource.data.id != null);
     }
+
+    // User profiles collection
+    match /user_profiles/{uid} {
+      allow read: if (isAuthenticated() && request.auth.uid == uid) || isAdmin();
+      allow write: if isAuthenticated() && request.auth.uid == uid;
+    }
   }
 }

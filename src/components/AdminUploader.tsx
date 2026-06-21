@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../utils/firebase';
 import { 
-  collection, doc, setDoc, deleteDoc, updateDoc, addDoc 
+  collection, doc, setDoc, deleteDoc, updateDoc, addDoc, onSnapshot 
 } from 'firebase/firestore';
 import { Song, Playlist, Genre } from '../types';
 import { 
   Music, Layers, Cloud, Presentation, Plus, Search, Trash2, 
   Edit3, CheckCircle, Clock, Check, AlertCircle, Sparkles, 
   Tv, LogOut, ChevronLeft, ChevronRight, ListMusic, PlusCircle, 
-  HelpCircle, Trash, RefreshCw, X, Wand2, Database
+  HelpCircle, Trash, RefreshCw, X, Wand2, Database, User, MapPin
 } from 'lucide-react';
 import { parseRawLyrics } from '../utils/lyricParser';
 import { motion, AnimatePresence } from 'motion/react';
@@ -30,7 +30,7 @@ interface AdminUploaderProps {
   genres: Genre[];
 }
 
-type AdminTab = 'songs' | 'playlists' | 'categories' | 'gdrive' | 'fetcher' | 'backup';
+type AdminTab = 'songs' | 'playlists' | 'categories' | 'gdrive' | 'fetcher' | 'backup' | 'users';
 
 export default function AdminUploader({ 
   playlists, 
@@ -78,6 +78,42 @@ export default function AdminUploader({
   const [playlistDesc, setPlaylistDesc] = useState('');
   const [playlistCover, setPlaylistCover] = useState('');
   const [playlistSelectedSongs, setPlaylistSelectedSongs] = useState<string[]>([]);
+
+  // Registered Joined Users states
+  const [joinedUsers, setJoinedUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState<boolean>(false);
+  const [userSearchQuery, setUserSearchQuery] = useState<string>('');
+
+  // Fetch registered user profiles from Firestore
+  useEffect(() => {
+    if (activeTab !== 'users') return;
+    setLoadingUsers(true);
+    const profilesCol = collection(db, 'user_profiles');
+    const unsubscribe = onSnapshot(profilesCol, (snap) => {
+      const list: any[] = [];
+      snap.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setJoinedUsers(list);
+      setLoadingUsers(false);
+    }, (err) => {
+      console.error("Error loading user profiles inside Admin dashboard:", err);
+      setLoadingUsers(false);
+    });
+    return () => unsubscribe();
+  }, [activeTab]);
+
+  // Compute filtered user profiles dynamically
+  const filteredJoinedUsers = React.useMemo(() => {
+    const q = userSearchQuery.trim().toLowerCase();
+    if (!q) return joinedUsers;
+    return joinedUsers.filter(usr => 
+      (usr.displayName || '').toLowerCase().includes(q) ||
+      (usr.email || '').toLowerCase().includes(q) ||
+      (usr.churchName || '').toLowerCase().includes(q) ||
+      (usr.churchLocation || '').toLowerCase().includes(q)
+    );
+  }, [joinedUsers, userSearchQuery]);
 
   // Category mapping tracker
   const songsCountByCategory = React.useMemo(() => {
@@ -281,7 +317,8 @@ export default function AdminUploader({
     { id: 'categories', label: 'Categories Hub', icon: Layers, color: 'text-emerald-500 bg-emerald-50 border-emerald-100' },
     { id: 'gdrive', label: 'GDrive Backups', icon: Cloud, color: 'text-amber-500 bg-amber-50 border-amber-100' },
     { id: 'fetcher', label: 'Lyrics Fetcher', icon: Sparkles, color: 'text-violet-500 bg-violet-50 border-violet-100' },
-    { id: 'backup', label: 'Master Backup', icon: Database, color: 'text-rose-500 bg-rose-50 border-rose-100' }
+    { id: 'backup', label: 'Master Backup', icon: Database, color: 'text-rose-500 bg-rose-50 border-rose-100' },
+    { id: 'users', label: 'Joined Users', icon: User, color: 'text-pink-500 bg-pink-50 border-pink-100' }
   ];
 
   return (
@@ -632,6 +669,84 @@ export default function AdminUploader({
             playlists={playlists}
             onRefreshData={onRefreshData}
           />
+        )}
+
+        {/* TAB 7: JOINED USERS / REGISTERED MEMBERS LIST */}
+        {activeTab === 'users' && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="font-bold text-slate-900 text-base md:text-lg tracking-tight">Joined Users & Assembly Registrations</h3>
+                <p className="text-slate-500 text-xs text-[11px] sm:text-xs">
+                  Review profile details, location demographics, and church affiliations registered by directory members.
+                </p>
+              </div>
+
+              <div className="relative w-full md:w-80 flex-shrink-0">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search members, churches, or locations..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 focus:border-slate-400 rounded-xl outline-none transition font-mono"
+                />
+              </div>
+            </div>
+
+            {loadingUsers ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-2">
+                <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
+                <span className="text-[11px] font-mono text-slate-400">Fetching member database...</span>
+              </div>
+            ) : filteredJoinedUsers.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 border border-slate-200 rounded-2xl text-slate-400 text-xs font-mono">
+                No registered members match your search criteria.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-sans text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 uppercase tracking-widest font-bold text-[9px] font-mono">
+                      <th className="py-3 px-4">Member Name</th>
+                      <th className="py-3 px-4">Email Address</th>
+                      <th className="py-3 px-4">Church Name / Affiliation</th>
+                      <th className="py-3 px-4">Location</th>
+                      <th className="py-3 px-4">Contact Phone</th>
+                      <th className="py-3 px-4">Role/Ministry Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {filteredJoinedUsers.map((mbr) => (
+                      <tr key={mbr.id} className="hover:bg-slate-55/40 transition-colors">
+                        <td className="py-4 px-4 font-bold text-slate-900">{mbr.displayName || 'Anonymous Member'}</td>
+                        <td className="py-4 px-4 font-mono text-slate-500">{mbr.email}</td>
+                        <td className="py-4 px-4 font-medium text-slate-700">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="p-1 bg-indigo-50 text-indigo-600 rounded">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 21h18M10 21V11.5M14 21V11.5M4 14V3.5a1.5 1.5 0 0 1 1.5-1.5h13a1.5 1.5 0 0 1 1.5 1.5V14" />
+                              </svg>
+                            </span>
+                            {mbr.churchName || <span className="italic text-slate-450 font-normal">Not Provided</span>}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-slate-605">
+                          {mbr.churchLocation || <span className="italic text-slate-450">Not Provided</span>}
+                        </td>
+                        <td className="py-4 px-4 font-mono text-slate-500">
+                          {mbr.phoneNumber || <span className="italic text-slate-450">Not Provided</span>}
+                        </td>
+                        <td className="py-4 px-4 text-slate-500">
+                          {mbr.additionalData || <span className="italic text-slate-450">None Specified</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
       </div>

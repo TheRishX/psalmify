@@ -3,6 +3,8 @@ import { Song, Playlist, Genre } from './types';
 import PlaylistListView from './components/PlaylistListView';
 import SongLyricsView from './components/SongLyricsView';
 import AdminUploader from './components/AdminUploader';
+import PPTEditorTab from './components/PPTEditorTab';
+import ProfileTab from './components/ProfileTab';
 import { auth, db, googleProvider, OperationType, handleFirestoreError } from './utils/firebase';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, getDocs, setDoc, doc, limit, startAfter, orderBy } from 'firebase/firestore';
@@ -19,9 +21,9 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'explore' | 'admin'>(() => {
+  const [activeTab, setActiveTab] = useState<'explore' | 'ppt-editor' | 'profile' | 'admin'>(() => {
     const local = localStorage.getItem('activeTab');
-    return (local === 'admin' || local === 'explore') ? local : 'explore';
+    return (local === 'admin' || local === 'explore' || local === 'ppt-editor' || local === 'profile') ? (local as any) : 'explore';
   });
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -56,7 +58,7 @@ export default function App() {
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
   const [submissionType, setSubmissionType] = useState<'song' | 'playlist'>('song');
 
-  // Monitor location path name to handle url changes (/admin and back)
+  // Monitor location path name to handle url changes (/admin, /ppt-editor, /profile and back)
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
@@ -70,6 +72,18 @@ export default function App() {
         searchParams.get('admin') === 'true'
       ) {
         setActiveTab('admin');
+      } else if (
+        path.startsWith('/ppt-editor') ||
+        hash.includes('ppt-editor') ||
+        searchParams.get('tab') === 'ppt-editor'
+      ) {
+        setActiveTab('ppt-editor');
+      } else if (
+        path.startsWith('/profile') ||
+        hash.includes('profile') ||
+        searchParams.get('tab') === 'profile'
+      ) {
+        setActiveTab('profile');
       } else {
         setActiveTab('explore');
       }
@@ -86,8 +100,14 @@ export default function App() {
     };
   }, []);
 
-  const navigateTo = (tab: 'explore' | 'admin') => {
-    const targetPath = tab === 'admin' ? '/?tab=admin#admin' : '/';
+  const navigateTo = (tab: 'explore' | 'ppt-editor' | 'profile' | 'admin') => {
+    const targetPath = tab === 'admin' 
+      ? '/?tab=admin#admin' 
+      : tab === 'ppt-editor'
+        ? '/?tab=ppt-editor#ppt-editor'
+        : tab === 'profile'
+          ? '/?tab=profile#profile'
+          : '/';
     window.history.pushState(null, '', targetPath);
     setActiveTab(tab);
     window.dispatchEvent(new Event('popstate'));
@@ -122,6 +142,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('searchQuery', searchQuery);
   }, [searchQuery]);
+
+  // Dynamically update document title based on the active state, song selection, and branding
+  useEffect(() => {
+    if (activeTab === 'admin') {
+      document.title = "Admin Dashboard | Psamify Lyrics";
+    } else if (activeTab === 'ppt-editor') {
+      document.title = "PowerPoint Presenter Editor | Psamify Lyrics";
+    } else if (activeTab === 'profile') {
+      document.title = "Contributor User Profile | Psamify Lyrics";
+    } else if (activeSongId) {
+      const activeSong = songs.find(s => s.id === activeSongId);
+      if (activeSong) {
+        document.title = `${activeSong.title} — ${activeSong.artist} | Psamify Lyrics`;
+      } else {
+        document.title = "Psamify Lyrics — High-Fidelity Song Finder";
+      }
+    } else {
+      document.title = "Psamify Lyrics — Premium Song Finder & Bilingual Parallel Translations";
+    }
+  }, [activeTab, activeSongId, songs]);
 
   // Firestore cursor-based pagination loader helper
   const SONGS_PER_PAGE = 8;
@@ -525,6 +565,44 @@ export default function App() {
         </div>
       </header>
 
+      {/* SECONDARY RESPONSIVE NAVIGATION CHIP BAR */}
+      <div className="bg-white border-b border-slate-200/80" id="secondary-navigation-bar">
+        <div className="max-w-7xl mx-auto px-4 md:px-8">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none font-mono text-[11px] font-bold">
+            <button
+              onClick={() => { setActiveSongId(null); navigateTo('explore'); }}
+              className={`py-3.5 px-3 transition-all relative border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'explore' 
+                  ? 'border-indigo-600 text-indigo-700 font-extrabold' 
+                  : 'border-transparent text-slate-550 hover:text-slate-800'
+              }`}
+            >
+              🎵 Lyrics Directory
+            </button>
+            <button
+              onClick={() => navigateTo('ppt-editor')}
+              className={`py-3.5 px-3 transition-all relative border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'ppt-editor' 
+                  ? 'border-indigo-600 text-indigo-700 font-extrabold' 
+                  : 'border-transparent text-slate-550 hover:text-slate-800'
+              }`}
+            >
+              📊 PowerPoint Presenter & Editor
+            </button>
+            <button
+              onClick={() => navigateTo('profile')}
+              className={`py-3.5 px-3 transition-all relative border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'profile' 
+                  ? 'border-indigo-600 text-indigo-700 font-extrabold' 
+                  : 'border-transparent text-slate-550 hover:text-slate-800'
+              }`}
+            >
+              👤 My Worship Profile
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* CORE BODY CONTAINER */}
       <main className="max-w-7xl mx-auto px-4 py-8 md:px-8 space-y-8" id="application-body">
         {loading ? (
@@ -766,6 +844,35 @@ export default function App() {
                   user={user}
                   onAuthError={setAuthError}
                   genres={genres}
+                />
+              </motion.div>
+            )}
+
+            {/* PPT PRESENTATION WORKSPACE */}
+            {activeTab === 'ppt-editor' && (
+              <motion.div
+                key="tab-ppt-editor"
+                initial={{ opacity: 0, scale: 0.99 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.99 }}
+              >
+                <PPTEditorTab
+                  songs={songs}
+                  user={user}
+                />
+              </motion.div>
+            )}
+
+            {/* CONTRIBUTOR PROFILE SECTION */}
+            {activeTab === 'profile' && (
+              <motion.div
+                key="tab-profile"
+                initial={{ opacity: 0, scale: 0.99 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.99 }}
+              >
+                <ProfileTab
+                  user={user}
                 />
               </motion.div>
             )}

@@ -49,6 +49,22 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "name"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Details of the user, their church, location and registered contact details.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "churchName": { "type": "string" },
+        "churchLocation": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "additionalData": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
     }
   },
   "firestore": {
@@ -63,6 +79,10 @@
     "/genres/{genreId}": {
       "schema": "Genre",
       "description": "Dynamic playlist & submission genres."
+    },
+    "/user_profiles/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile collection, editable by owners and viewable by admin."
     }
   }
 }

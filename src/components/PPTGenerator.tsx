@@ -3,7 +3,7 @@ import { Song, FormattedSection } from '../types';
 import { 
   X, Presentation, Download, Play, ChevronLeft, ChevronRight, 
   Settings, Layout, Type, Palette, MonitorCheck, Maximize2, Minimize2,
-  Sparkles, Loader2, RotateCcw
+  Sparkles, Loader2, RotateCcw, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pptxgen from 'pptxgenjs';
@@ -87,6 +87,7 @@ const THEMES: PPTThemeConfig[] = [
 
 export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
   const [selectedThemeId, setSelectedThemeId] = useState<PPTThemeId>('cosmic-dark');
+  const [pptFontOverride, setPptFontOverride] = useState<string | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
@@ -99,6 +100,8 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
 
   const allAvailableThemes = customAITheme ? [...THEMES, customAITheme] : THEMES;
   const activeTheme = allAvailableThemes.find(t => t.id === selectedThemeId) || THEMES[0];
+
+  const currentFontFace = pptFontOverride || activeTheme.fontFace;
 
   // Logic to build slides from stanzas
   const slides = React.useMemo(() => {
@@ -252,7 +255,7 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
           fontSize: 11,
           bold: true,
           color: activeTheme.pptAccent,
-          fontFace: activeTheme.fontFace,
+          fontFace: currentFontFace,
         });
 
         // Stanza Head label / Section Label
@@ -264,7 +267,7 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
           fontSize: 16,
           bold: true,
           color: activeTheme.pptAccent,
-          fontFace: activeTheme.fontFace,
+          fontFace: currentFontFace,
         });
 
         // Content Lyrics body
@@ -285,7 +288,7 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
           h: 3.5,
           fontSize: fontSlideSize,
           color: activeTheme.pptText,
-          fontFace: activeTheme.fontFace,
+          fontFace: currentFontFace,
           align: 'left',
           valign: 'middle',
           lineSpacing: fontSlideSize * 1.4, // nice and legible paragraph spacing
@@ -301,7 +304,7 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
           italic: true,
           color: activeTheme.pptAccent,
           align: 'left',
-          fontFace: activeTheme.fontFace,
+          fontFace: currentFontFace,
         });
       });
 
@@ -362,7 +365,7 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
           
           {/* Active Canvas Stage card */}
           <div 
-            style={{ backgroundColor: activeTheme.bgStr, fontFamily: activeTheme.fontFace }}
+            style={{ backgroundColor: activeTheme.bgStr, fontFamily: currentFontFace }}
             className={`relative flex-1 flex flex-col justify-between border shadow-2xl rounded-3xl overflow-hidden transition-all duration-300 ${
               isFullScreen ? 'border-0 rounded-none' : 'border-slate-800/80 p-8 md:p-12 min-h-[350px]'
             }`}
@@ -561,6 +564,58 @@ export default function PPTGenerator({ song, onClose }: PPTGeneratorProps) {
                           <span className="font-semibold">{theme.name}</span>
                         </div>
                         {isSel && <MonitorCheck className="w-4 h-4 text-indigo-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Font Selection Panel with 5 distinct Hindi fonts and traditional ones */}
+            <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2 text-indigo-400 border-b border-slate-800 pb-3">
+                <Type className="w-4 h-4" />
+                <h4 className="text-xs font-bold uppercase tracking-wider">Slide Font Customizer</h4>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                  Override default theme typography. Toggle between curated high contrast Hindi Devanagari and Latin elegant fonts:
+                </p>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { id: 'theme-default', label: 'Use Theme Default', family: null, preview: 'Default Font' },
+                    { id: 'poppins', label: 'Poppins (Hindi Modern)', family: 'Poppins', preview: 'वंदे मातरम्' },
+                    { id: 'rajdhani', label: 'Rajdhani (Hindi Tech)', family: 'Rajdhani', preview: 'नमस्कार' },
+                    { id: 'yatra', label: 'Yatra One (Hindi Poster)', family: 'Yatra One', preview: 'कल्याणम' },
+                    { id: 'rozha', label: 'Rozha One (Hindi Bold)', family: 'Rozha One', preview: 'सुर सिंगार' },
+                    { id: 'arima', label: 'Arima (Hindi Organic Scroll)', family: 'Arima', preview: 'राग मल्हार' },
+                    { id: 'georgia', label: 'Georgia (Serif Elegant)', family: 'Georgia', preview: 'Abba Father' },
+                    { id: 'arial', label: 'Arial (Clean Classic)', family: 'Arial', preview: 'Hallelujah' },
+                  ].map((fontOpt) => {
+                    const isSelected = pptFontOverride === fontOpt.family;
+                    return (
+                      <button
+                        key={fontOpt.id}
+                        type="button"
+                        onClick={() => setPptFontOverride(fontOpt.family)}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                          isSelected
+                            ? 'border-indigo-500 bg-indigo-500/10 text-white font-bold'
+                            : 'border-slate-800 hover:border-slate-700 bg-slate-950/40 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold">{fontOpt.label}</span>
+                          <span 
+                            style={{ fontFamily: fontOpt.family || undefined }} 
+                            className="text-[10px] text-slate-500 mt-0.5 leading-none"
+                          >
+                            Sample: {fontOpt.preview}
+                          </span>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </button>
                     );
                   })}

@@ -3,12 +3,13 @@ import { Song, FormattedSection } from '../types';
 import { 
   Play, Pause, RotateCcw, Volume2, Sparkles, FileText, 
   Music, Youtube, Hash, HelpCircle, Check, Info, Maximize2, 
-  Minimize2, ZoomIn, ZoomOut, Copy, Download, Radio
+  Minimize2, ZoomIn, ZoomOut, Copy, Download, Radio, Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../utils/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { parseRawLyrics } from '../utils/lyricParser';
+import { jsPDF } from 'jspdf';
 
 interface SongLyricsViewProps {
   song: Song;
@@ -27,12 +28,20 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
   const [lyricFontSize, setLyricFontSize] = useState<number>(20); // default 20px
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [autoScrollActive, setAutoScrollActive] = useState<boolean>(true);
-  const [readerTheme, setReaderTheme] = useState<'light' | 'dark' | 'sepia'>('light');
+  const [readerTheme, setReaderTheme] = useState<'light' | 'dark' | 'sepia'>(() => {
+    const saved = localStorage.getItem('readerTheme') as 'light' | 'dark' | 'sepia' | null;
+    return saved === 'light' || saved === 'dark' || saved === 'sepia' ? saved : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('readerTheme', readerTheme);
+  }, [readerTheme]);
   const [hindiFont, setHindiFont] = useState<'poppins' | 'rajdhani' | 'yatra' | 'rozha' | 'arima' | 'martel'>('poppins');
 
   // Bilingual translation & tabs management
   const [lyricsLanguageTab, setLyricsLanguageTab] = useState<'english' | 'hindi'>('english');
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeRawLyricsHindi, setActiveRawLyricsHindi] = useState(song.rawLyricsHindi || '');
   const [activeFormattedLyricsHindi, setActiveFormattedLyricsHindi] = useState<FormattedSection[]>(song.formattedLyricsHindi || []);
 
@@ -266,6 +275,303 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
     document.body.removeChild(element);
   };
 
+  // Download beautifully formatted printable PDF lyrics sheet
+  const downloadLyricsAsPdf = () => {
+    setIsGeneratingPdf(true);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const activeLyricsList = lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi;
+
+      // Canvas dimensions for sharp A4 rendering (150 DPI)
+      const canvasWidth = 1240;
+      const canvasHeight = 1754;
+
+      // Extract colors that map to currently active reader mode themes
+      const isDark = readerTheme === 'dark';
+      const isSepia = readerTheme === 'sepia';
+
+      let pageBg = '#f8fafc'; // Default modern background
+      let textPrimary = '#0f172a';
+      let textSecondary = '#475569';
+      let dividerColor = '#cbd5e1';
+
+      let stdBg = '#ffffff';
+      let stdBorder = '#e2e8f0';
+      let stdLabel = '#64748b';
+      let stdText = '#1e293b';
+
+      let chorusBg = '#fff1f2';
+      let chorusBorder = '#fbcfe8';
+      let chorusLabel = '#be123c';
+      let chorusText = '#4c0519';
+
+      let introBg = '#f0fdfa';
+      let introBorder = '#ccfbf1';
+      let introLabel = '#0f766e';
+      let introText = '#115e59';
+
+      if (isDark) {
+        pageBg = '#0f172a';
+        textPrimary = '#f8fafc';
+        textSecondary = '#94a3b8';
+        dividerColor = '#334155';
+
+        stdBg = '#1e293b';
+        stdBorder = '#334145';
+        stdLabel = '#cbd5e1';
+        stdText = '#f8fafc';
+
+        chorusBg = '#4c0519';
+        chorusBorder = '#9f1239';
+        chorusLabel = '#f472b6';
+        chorusText = '#fce7f3';
+
+        introBg = '#042f2e';
+        introBorder = '#115e59';
+        introLabel = '#2dd4bf';
+        introText = '#99f6e4';
+      } else if (isSepia) {
+        pageBg = '#f4ecd8';
+        textPrimary = '#433422';
+        textSecondary = '#7c6a59';
+        dividerColor = '#dcd0b4';
+
+        stdBg = '#ece0c4';
+        stdBorder = '#dcd0b4';
+        stdLabel = '#5a462e';
+        stdText = '#433422';
+
+        chorusBg = '#ffd9cc';
+        chorusBorder = '#eed5cc';
+        chorusLabel = '#803c26';
+        chorusText = '#4b1d0e';
+
+        introBg = '#e2ecc2';
+        introBorder = '#cbd8ae';
+        introLabel = '#14532d';
+        introText = '#3d442b';
+      }
+
+      let pageNum = 1;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvasWidth;
+      tempCanvas.height = canvasHeight;
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) {
+        setIsGeneratingPdf(false);
+        return;
+      }
+
+      // Safe cross-browser rounded corners generator for classic look in exports
+      const drawRoundRectCorners = (x: number, y: number, w: number, h: number, tl: number, tr: number, br: number, bl: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + tl, y);
+        ctx.lineTo(x + w - tr, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + tr);
+        ctx.lineTo(x + w, y + h - br);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+        ctx.lineTo(x + bl, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - bl);
+        ctx.lineTo(x, y + tl);
+        ctx.quadraticCurveTo(x, y, x + tl, y);
+        ctx.closePath();
+      };
+
+      // Helper to initialize and frame each page correctly
+      const initPage = (pNum: number) => {
+        ctx.fillStyle = pageBg;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        // Frame boundary decoration
+        ctx.strokeStyle = dividerColor;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(40, 40, canvasWidth - 80, canvasHeight - 80);
+
+        if (pNum === 1) {
+          // Main banner title section
+          ctx.fillStyle = textPrimary;
+          ctx.font = 'bold 38px "Space Grotesk", "Inter", sans-serif';
+          ctx.fillText(song.title, 80, 110, canvasWidth - 160);
+
+          // Subtitle artist line
+          ctx.fillStyle = textSecondary;
+          ctx.font = 'italic 18px "Inter", sans-serif';
+          ctx.fillText(`by ${song.artist}`, 80, 145, canvasWidth - 160);
+
+          // Meta statistics list
+          ctx.fillStyle = textSecondary;
+          ctx.font = '12px "JetBrains Mono", monospace';
+          const metaColumns = [];
+          if (song.album) metaColumns.push(`Album: ${song.album}`);
+          if (song.genre) metaColumns.push(`Genre: ${song.genre}`);
+          if (song.duration) metaColumns.push(`Length: ${song.duration}`);
+          metaColumns.push(`Language: ${lyricsLanguageTab === 'english' ? 'English' : 'Hindi'}`);
+          ctx.fillText(metaColumns.join('  •  '), 80, 180, canvasWidth - 160);
+
+          // Border divider
+          ctx.strokeStyle = dividerColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(80, 205);
+          ctx.lineTo(canvasWidth - 80, 205);
+          ctx.stroke();
+
+          return 245; // Start coordinates Y on first page
+        } else {
+          // Running page header
+          ctx.fillStyle = textSecondary;
+          ctx.font = '12px "JetBrains Mono", monospace';
+          ctx.fillText(`${song.title}  |  Lyrics Document`, 80, 70);
+          ctx.textAlign = 'right';
+          ctx.fillText(`Page ${pNum}`, canvasWidth - 80, 70);
+          ctx.textAlign = 'left';
+
+          // Line runner divider
+          ctx.strokeStyle = dividerColor;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(80, 85);
+          ctx.lineTo(canvasWidth - 80, 85);
+          ctx.stroke();
+
+          return 125; // Start coordinates Y on other pages
+        }
+      };
+
+      let currentY = initPage(pageNum);
+
+      // Map font family dynamically depending on Roman script vs Hindi Devanagari Font selectors
+      const getFontFamily = () => {
+        if (lyricsLanguageTab === 'hindi') {
+          if (hindiFont === 'poppins') return 'Poppins, sans-serif';
+          if (hindiFont === 'rajdhani') return 'Rajdhani, sans-serif';
+          if (hindiFont === 'yatra') return '"Yatra One", serif';
+          if (hindiFont === 'rozha') return '"Rozha One", serif';
+          if (hindiFont === 'arima') return 'Arima, serif';
+          if (hindiFont === 'martel') return 'Martel, serif';
+          return 'Poppins, sans-serif';
+        }
+        return '"Inter", "Helvetica", Arial, sans-serif';
+      };
+
+      const lyricFontFamily = getFontFamily();
+
+      // Loop and draw formatted stanzas section by section
+      for (let i = 0; i < activeLyricsList.length; i++) {
+        const section = activeLyricsList[i];
+        const isChorus = section.type === 'chorus';
+        const isIntro = section.type === 'intro' || section.type === 'outro';
+
+        let bgStyle = stdBg;
+        let borderStyle = stdBorder;
+        let colorLabel = stdLabel;
+        let colorLine = stdText;
+
+        if (isChorus) {
+          bgStyle = chorusBg;
+          borderStyle = chorusBorder;
+          colorLabel = chorusLabel;
+          colorLine = chorusText;
+        } else if (isIntro) {
+          bgStyle = introBg;
+          borderStyle = introBorder;
+          colorLabel = introLabel;
+          colorLine = introText;
+        }
+
+        // Determine spacing metrics
+        const paddingVertical = 25;
+        const paddingHorizontal = 35;
+        const sLabelHeight = 18;
+        const sGapAfterLabel = 12;
+        const sLineHeight = 32;
+        const trailingGap = 20;
+
+        const totalCardHeight = paddingVertical + sLabelHeight + sGapAfterLabel + (section.lines.length * sLineHeight) + trailingGap;
+
+        // Auto-handle standard multi-page break split
+        if (currentY + totalCardHeight > 1620) {
+          // Capture current frame and add it to doc prior to page generation
+          const frameImg = tempCanvas.toDataURL('image/jpeg', 0.95);
+          if (pageNum > 1) {
+            doc.addPage();
+          }
+          doc.addImage(frameImg, 'JPEG', 0, 0, 210, 297);
+
+          pageNum++;
+          currentY = initPage(pageNum);
+        }
+
+        const boxX = 80;
+        const boxWidth = canvasWidth - 160;
+
+        // Draw main container backing
+        ctx.fillStyle = bgStyle;
+        ctx.strokeStyle = borderStyle;
+        ctx.lineWidth = 1;
+        drawRoundRectCorners(boxX, currentY, boxWidth, totalCardHeight, 12, 12, 12, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // Thick side bar accent specifically for Chorus structures (pink/rose) or Intro (teal) or Sepia matching counterparts
+        if (isChorus) {
+          ctx.fillStyle = '#f43f5e';
+          drawRoundRectCorners(boxX, currentY, 6, totalCardHeight, 12, 0, 0, 12);
+          ctx.fill();
+        } else if (isIntro) {
+          ctx.fillStyle = '#0f766e';
+          drawRoundRectCorners(boxX, currentY, 6, totalCardHeight, 12, 0, 0, 12);
+          ctx.fill();
+        }
+
+        // Stamp headers
+        ctx.fillStyle = colorLabel;
+        ctx.font = 'bold 12px "JetBrains Mono", monospace';
+        const displayLabel = section.label ? section.label.toUpperCase() : (isChorus ? 'CHORUS' : 'STANZA');
+        ctx.fillText(displayLabel, boxX + paddingHorizontal, currentY + paddingVertical + 4);
+
+        if (isChorus) {
+          ctx.fillText('✦', boxX + boxWidth - paddingHorizontal - 8, currentY + paddingVertical + 4);
+        }
+
+        let lineY = currentY + paddingVertical + sLabelHeight + sGapAfterLabel;
+
+        // Write individual lyrics
+        ctx.fillStyle = colorLine;
+        const isBold = isChorus ? 'bold' : 'normal';
+        const isItalic = isChorus ? 'italic' : 'normal';
+        ctx.font = `${isItalic} ${isBold} 17px ${lyricFontFamily}`;
+
+        for (const line of section.lines) {
+          ctx.fillText(line, boxX + paddingHorizontal, lineY, boxWidth - 2 * paddingHorizontal);
+          lineY += sLineHeight;
+        }
+
+        // Setup top margin for the next element box
+        currentY += totalCardHeight + 25;
+      }
+
+      // Add final page frame to document
+      const lastFrame = tempCanvas.toDataURL('image/jpeg', 0.95);
+      if (pageNum > 1) {
+        doc.addPage();
+      }
+      doc.addImage(lastFrame, 'JPEG', 0, 0, 210, 297);
+
+      // Save output
+      doc.save(`${song.title.replace(/\s+/g, '_')}_Lyrics_Sheet.pdf`);
+    } catch (err) {
+      console.error("PDF generator encountered an error:", err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8" id="lyrics-view-grid">
       
@@ -427,6 +733,21 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Download</span>
+              </button>
+
+              {/* Download beautifully formatted printable PDF lyrics sheet */}
+              <button
+                onClick={downloadLyricsAsPdf}
+                disabled={isGeneratingPdf}
+                className="p-1.5 rounded-lg bg-rose-50 border border-rose-200/80 text-rose-600 hover:bg-rose-100 text-xs flex items-center gap-1 font-mono transition-colors cursor-pointer disabled:opacity-50"
+                title="Save as beautiful printable PDF document"
+              >
+                {isGeneratingPdf ? (
+                  <span className="w-3.5 h-3.5 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></span>
+                ) : (
+                  <Printer className="w-3.5 h-3.5" />
+                )}
+                <span className="hidden sm:inline">Download PDF</span>
               </button>
 
               {/* Toggle Styled vs Raw */}
@@ -684,10 +1005,10 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                     const themeStyles = {
                       light: {
                         chorus: {
-                          bg: isSectionActive ? "bg-emerald-50 border-emerald-300 shadow-md ring-1 ring-emerald-500/10" : "bg-emerald-50/10 border-emerald-100 hover:border-emerald-250/20 hover:bg-emerald-50/20",
-                          header: "text-emerald-700",
-                          line: "text-slate-900 font-semibold italic",
-                          borderLeft: "border-l-emerald-550"
+                          bg: isSectionActive ? "bg-rose-50/95 border-pink-400 ring-2 ring-pink-500/20 shadow-md scale-[1.01]" : "bg-gradient-to-br from-rose-50/70 to-pink-50/40 border-pink-200/80 shadow-sm hover:bg-rose-50/50",
+                          header: "text-pink-700 font-extrabold tracking-wide",
+                          line: "text-pink-950 font-bold italic tracking-wide",
+                          borderLeft: "border-l-pink-500 border-l-[6px]"
                         },
                         tension: {
                           bg: isSectionActive ? "bg-orange-100 hover:bg-orange-100 border-orange-300 shadow-md ring-1 ring-orange-500/10" : "bg-orange-50/15 border-orange-100 hover:border-orange-200 hover:bg-orange-50/30",
@@ -702,24 +1023,24 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                           borderLeft: "border-l-amber-500"
                         },
                         intro: {
-                          bg: "bg-slate-50 border-slate-100",
-                          header: "text-slate-400",
-                          line: "text-slate-500 font-mono",
-                          borderLeft: "border-l-slate-300"
+                          bg: "bg-teal-50 border-teal-150",
+                          header: "text-teal-700 font-medium",
+                          line: "text-teal-800 font-mono italic",
+                          borderLeft: "border-l-teal-400"
                         },
                         standard: {
-                          bg: isSectionActive ? "bg-violet-50/80 border-violet-300 shadow-md ring-1 ring-violet-500/10" : "bg-violet-50/10 border-violet-100/70 hover:border-violet-200 hover:bg-violet-50/20",
-                          header: "text-violet-700",
+                          bg: isSectionActive ? "bg-slate-100 border-slate-350 shadow-md ring-1 ring-slate-500/10" : "bg-slate-50/60 border-slate-250/40 hover:border-slate-300 hover:bg-slate-50/80",
+                          header: "text-slate-600 font-semibold",
                           line: "text-slate-800 font-sans",
-                          borderLeft: "border-l-violet-400"
+                          borderLeft: "border-l-slate-400"
                         }
                       },
                       dark: {
                         chorus: {
-                          bg: isSectionActive ? "bg-emerald-950/40 border-emerald-700 shadow-md ring-1 ring-emerald-500/20" : "bg-emerald-950/10 border-emerald-900/60 hover:bg-emerald-950/20 hover:border-emerald-800",
-                          header: "text-emerald-400",
-                          line: "text-emerald-100 font-semibold italic",
-                          borderLeft: "border-l-emerald-600"
+                          bg: isSectionActive ? "bg-gradient-to-r from-rose-950/50 to-indigo-950/50 border-pink-500 ring-2 ring-pink-500/30 shadow-md scale-[1.01]" : "bg-gradient-to-br from-rose-950/20 to-indigo-950/20 border-pink-900/50 hover:bg-rose-950/30 hover:border-rose-800",
+                          header: "text-pink-400 font-extrabold tracking-wide",
+                          line: "text-rose-100 font-bold italic tracking-wide",
+                          borderLeft: "border-l-pink-500 border-l-[6px]"
                         },
                         tension: {
                           bg: isSectionActive ? "bg-orange-950/50 border-orange-700 shadow-md ring-1 ring-orange-500/25" : "bg-orange-950/15 border-orange-900/40 hover:bg-orange-950/30 hover:border-orange-800",
@@ -728,30 +1049,30 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                           borderLeft: "border-l-orange-550"
                         },
                         bridge: {
-                          bg: isSectionActive ? "bg-amber-950/40 border-amber-700 shadow-md ring-1 ring-amber-500/20" : "bg-amber-950/10 border-amber-900/60 hover:bg-amber-950/20 hover:border-amber-805",
+                          bg: isSectionActive ? "bg-amber-955/40 border-amber-700 shadow-md ring-1 ring-amber-500/20" : "bg-amber-950/10 border-amber-900/60 hover:bg-amber-950/20 hover:border-amber-805",
                           header: "text-amber-400",
                           line: "text-amber-100 font-serif italic",
                           borderLeft: "border-l-amber-600"
                         },
                         intro: {
-                          bg: "bg-slate-900/60 border-slate-800",
-                          header: "text-slate-500",
-                          line: "text-slate-400 font-mono",
-                          borderLeft: "border-l-slate-600"
+                          bg: "bg-teal-950/20 border-teal-900",
+                          header: "text-teal-450",
+                          line: "text-teal-300 font-mono",
+                          borderLeft: "border-l-teal-600"
                         },
                         standard: {
-                          bg: isSectionActive ? "bg-violet-950/40 border-violet-700 shadow-md ring-1 ring-violet-500/20" : "bg-violet-950/10 border-violet-900/60 hover:bg-violet-950/20 hover:border-violet-800",
-                          header: "text-violet-400",
+                          bg: isSectionActive ? "bg-slate-900 border-slate-700 shadow-md ring-1 ring-slate-500/10" : "bg-slate-900/40 border-slate-800/80 hover:bg-slate-900/60 hover:border-slate-700",
+                          header: "text-slate-450 font-semibold",
                           line: "text-slate-300 font-sans",
-                          borderLeft: "border-l-violet-500"
+                          borderLeft: "border-l-slate-600"
                         }
                       },
                       sepia: {
                         chorus: {
-                          bg: isSectionActive ? "bg-[#e2d5bd] border-[#c0af8b] shadow-md ring-1 ring-[#a48e65]/10" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
-                          header: "text-[#1d4122] font-bold",
-                          line: "text-[#332210] font-semibold italic",
-                          borderLeft: "border-l-emerald-705"
+                          bg: isSectionActive ? "bg-[#ffd9cc]/60 border-[#c46a4f] ring-2 ring-orange-500/20 scale-[1.01]" : "bg-[#fbe7df]/40 border-[#eed5cc]/85 hover:bg-[#ffd9cc]/15 hover:border-[#dfc3b5]",
+                          header: "text-[#803c26] font-extrabold tracking-wide",
+                          line: "text-[#4b1d0e] font-bold italic tracking-wide",
+                          borderLeft: "border-l-[#b04f32] border-l-[6px]"
                         },
                         tension: {
                           bg: isSectionActive ? "bg-[#f5e3d3] border-[#d8b08d] shadow-md ring-1 ring-[#c08d5c]/15" : "bg-[#f5e3d3]/25 border-[#eed5be] hover:bg-[#f5e3d3]/50 hover:border-[#d9af88]",
@@ -761,21 +1082,21 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                         },
                         bridge: {
                           bg: isSectionActive ? "bg-[#ebdca5] border-[#c8b788] shadow-md ring-1 ring-[#a89564]/10" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
-                          header: "text-amber-950",
+                          header: "text-amber-955",
                           line: "text-[#332210] font-serif italic",
                           borderLeft: "border-l-amber-700"
                         },
                         intro: {
-                          bg: "bg-[#eadebe]/40 border-[#d0c19b]",
-                          header: "text-[#857053]",
-                          line: "text-[#6d5b43] font-mono",
-                          borderLeft: "border-l-[#a09070]"
+                          bg: "bg-[#e2ecc2]/40 border-[#cbd8ae]",
+                          header: "text-emerald-900 font-semibold",
+                          line: "text-[#3d442b] font-mono",
+                          borderLeft: "border-l-emerald-600"
                         },
                         standard: {
-                          bg: isSectionActive ? "bg-[#ece0c4] border-[#cfc19e] shadow-md ring-1 ring-[#af9e7a]/10" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
-                          header: "text-violet-900",
+                          bg: isSectionActive ? "bg-[#ece0c4] border-[#cfc19e] shadow-md ring-1 ring-[#af9e7a]/15" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
+                          header: "text-[#5a462e] font-semibold",
                           line: "text-[#403019] font-sans",
-                          borderLeft: "border-l-violet-700"
+                          borderLeft: "border-l-[#a08b68]"
                         }
                       }
                     };
@@ -1022,10 +1343,10 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                   const themeStyles = {
                     light: {
                       chorus: {
-                        bg: isSectionActive ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-500/10 shadow-sm" : "bg-white border-emerald-100",
-                        header: "text-emerald-600",
-                        line: "italic font-bold text-slate-905",
-                        borderLeft: "border-l-emerald-500"
+                        bg: isSectionActive ? "bg-rose-50/95 border-pink-400 ring-2 ring-pink-500/20 shadow-md scale-[1.01]" : "bg-gradient-to-br from-rose-50/70 to-pink-50/40 border-pink-200/80 shadow-sm",
+                        header: "text-pink-700 font-extrabold tracking-wide",
+                        line: "text-pink-950 font-bold italic tracking-wide",
+                        borderLeft: "border-l-pink-500 border-l-[6px]"
                       },
                       tension: {
                         bg: isSectionActive ? "bg-orange-100 border-orange-300 ring-1 ring-orange-500/10 shadow-sm" : "bg-white border-orange-100",
@@ -1054,10 +1375,10 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                     },
                     dark: {
                       chorus: {
-                        bg: isSectionActive ? "bg-emerald-950/40 border-emerald-700 ring-1 ring-emerald-500/20 shadow-sm" : "bg-slate-900 border-emerald-950",
-                        header: "text-emerald-450",
-                        line: "italic font-bold text-emerald-100",
-                        borderLeft: "border-l-emerald-600"
+                        bg: isSectionActive ? "bg-gradient-to-r from-rose-950/50 to-indigo-950/50 border-pink-500 ring-2 ring-pink-500/30 shadow-md scale-[1.01]" : "bg-gradient-to-br from-rose-955/20 to-indigo-955/20 border-pink-900/50 hover:bg-rose-955/30 hover:border-rose-800",
+                        header: "text-pink-400 font-extrabold tracking-wide",
+                        line: "text-rose-100 font-bold italic tracking-wide",
+                        borderLeft: "border-l-pink-500 border-l-[6px]"
                       },
                       tension: {
                         bg: isSectionActive ? "bg-orange-950/50 border-orange-700 ring-1 ring-orange-500/25 shadow-sm" : "bg-slate-900 border-orange-950",
@@ -1086,10 +1407,10 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                     },
                     sepia: {
                       chorus: {
-                        bg: isSectionActive ? "bg-[#e2d5bd] border-[#c0af8b] ring-1 ring-[#a48e65]/10 shadow-sm" : "bg-[#ece0c4]/40 border-[#dfd2be]",
-                        header: "text-[#1d4122] font-bold",
-                        line: "italic font-bold text-[#332210]",
-                        borderLeft: "border-l-emerald-700"
+                        bg: isSectionActive ? "bg-[#ffd9cc]/60 border-[#c46a4f] ring-2 ring-orange-500/20 scale-[1.01]" : "bg-[#fbe7df]/40 border-[#eed5cc]/85 hover:bg-[#ffd9cc]/15 hover:border-[#dfc3b5]",
+                        header: "text-[#803c26] font-extrabold tracking-wide",
+                        line: "text-[#4b1d0e] font-bold italic tracking-wide",
+                        borderLeft: "border-l-[#b04f32] border-l-[6px]"
                       },
                       tension: {
                         bg: isSectionActive ? "bg-[#f5e3d3] border-[#d8b08d] ring-1 ring-[#c08d5c]/15 shadow-sm" : "bg-[#ece0c4]/40 border-[#dfd2be]",
