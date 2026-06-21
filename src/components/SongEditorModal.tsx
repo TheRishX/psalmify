@@ -53,6 +53,18 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
           songInfo: { title, artist }
         })
       });
+      
+      if (!response.ok) {
+        const errText = await response.text();
+        let errMsg = 'Server-side formatter returned an error status.';
+        try {
+          const errObj = JSON.parse(errText);
+          errMsg = errObj.error || errMsg;
+        } catch (_) {}
+        setError(errMsg);
+        return;
+      }
+
       const data = await response.json();
       if (data.success && data.formattedText) {
         setRawLyrics(data.formattedText);
@@ -61,7 +73,8 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
         setError(data.error || 'Failed to beautify lyrics.');
       }
     } catch (e: any) {
-      setError('Connection to AI formatter failed.');
+      console.error("AI Beautify Client Error:", e);
+      setError('Connection to AI formatter failed: ' + (e.message || String(e)));
     } finally {
       setIsBeautifying(false);
     }
@@ -82,6 +95,18 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
           songInfo: { title, artist }
         })
       });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        let errMsg = 'Server-side proofreader returned an error status.';
+        try {
+          const errObj = JSON.parse(errText);
+          errMsg = errObj.error || errMsg;
+        } catch (_) {}
+        setError(errMsg);
+        return;
+      }
+
       const data = await response.json();
       if (data.success && data.formattedText) {
         setRawLyrics(data.formattedText);
@@ -90,7 +115,8 @@ export default function SongEditorModal({ song, genres, onClose, onSave }: SongE
         setError(data.error || 'Failed to proofread lyrics.');
       }
     } catch (e: any) {
-      setError('Connection to AI proofreader failed.');
+      console.error("AI Correct Client Error:", e);
+      setError('Connection to AI proofreader failed: ' + (e.message || String(e)));
     } finally {
       setIsCorrecting(false);
     }

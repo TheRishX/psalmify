@@ -26,6 +26,14 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+function cleanMarkdownBlocks(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/^[ \t]*```[a-zA-Z0-9-]*\n?/gm, "")
+    .replace(/\n?```[ \t]*$/gm, "")
+    .trim();
+}
+
 const app = express();
 app.use(express.json({ limit: '10mb' })); // support higher payload sizes for images
 
@@ -114,15 +122,23 @@ Return the formatted lyrics text directly. Do not include any HTML, markdown, or
       contents: prompt
     });
 
+    const outputText = response.text || "";
+    const cleanedText = cleanMarkdownBlocks(outputText) || rawLyrics;
+
     res.json({
       success: true,
-      formattedText: response.text || rawLyrics,
+      formattedText: cleanedText,
       enrichment: "Formatted flawlessly by Gemini AI.",
       isSimulated: false
     });
   } catch (error: any) {
     console.error("Gemini Beautify Error:", error);
-    res.status(500).json({ error: "Gemini formatting failed: " + error.message });
+    // Return success: false but with status 200, so client json parser never fails
+    res.json({
+      success: false,
+      error: "Gemini formatting failed: " + error.message,
+      formattedText: rawLyrics
+    });
   }
 });
 
@@ -166,15 +182,22 @@ Return the corrected lyrics text directly. Do not include any chat summaries, ex
       contents: prompt
     });
 
+    const outputText = response.text || "";
+    const cleanedText = cleanMarkdownBlocks(outputText) || rawLyrics;
+
     res.json({
       success: true,
-      formattedText: response.text || rawLyrics,
+      formattedText: cleanedText,
       enrichment: "Proofread and spell-corrected by Gemini AI.",
       isSimulated: false
     });
   } catch (err: any) {
     console.error("Gemini proofread typo-correction error:", err);
-    res.status(500).json({ error: "AI lyrics proofreading failed: " + err.message });
+    res.json({
+      success: false,
+      error: "AI lyrics proofreading failed: " + err.message,
+      formattedText: rawLyrics
+    });
   }
 });
 
@@ -218,15 +241,22 @@ Return the Hindi lyrics text directly. Do not include any notes, preambles, or m
       contents: prompt
     });
 
+    const outputText = response.text || "";
+    const cleanedText = cleanMarkdownBlocks(outputText) || rawLyrics;
+
     res.json({
       success: true,
-      formattedText: response.text || rawLyrics,
+      formattedText: cleanedText,
       enrichment: "Successfully translated to Hindi using Gemini AI.",
       isSimulated: false
     });
   } catch (err: any) {
     console.error("Gemini translation error:", err);
-    res.status(500).json({ error: "AI translation failed: " + err.message });
+    res.json({
+      success: false,
+      error: "AI translation failed: " + err.message,
+      formattedText: rawLyrics
+    });
   }
 });
 
