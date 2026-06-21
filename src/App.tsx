@@ -129,21 +129,34 @@ export default function App() {
   const loadInitialSongs = async () => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "songs"),
-        where("status", "==", "approved"),
-        limit(SONGS_PER_PAGE)
-      );
+      let q;
+      // If we are on the admin panel tab, retrieve ALL songs (including pending ones) for moderation
+      if (activeTab === 'admin') {
+        q = query(
+          collection(db, "songs")
+        );
+      } else {
+        q = query(
+          collection(db, "songs"),
+          where("status", "==", "approved"),
+          limit(SONGS_PER_PAGE)
+        );
+      }
       const querySnapshot = await getDocs(q);
       const list: Song[] = [];
       querySnapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Song);
+        list.push({ id: docSnap.id, ...docSnap.data() as any } as Song);
       });
       setSongs(list);
       
-      const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
-      setLastVisible(lastDoc);
-      setHasMore(querySnapshot.docs.length === SONGS_PER_PAGE);
+      if (activeTab !== 'admin') {
+        const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+        setLastVisible(lastDoc);
+        setHasMore(querySnapshot.docs.length === SONGS_PER_PAGE);
+      } else {
+        setLastVisible(null);
+        setHasMore(false);
+      }
     } catch (error) {
       console.error("Failed loading initial songs batch:", error);
     } finally {
@@ -152,7 +165,7 @@ export default function App() {
   };
 
   const loadNextSongs = async () => {
-    if (!lastVisible || loadingMore) return;
+    if (!lastVisible || loadingMore || activeTab === 'admin') return;
     setLoadingMore(true);
     try {
       const q = query(
@@ -164,7 +177,7 @@ export default function App() {
       const querySnapshot = await getDocs(q);
       const list: Song[] = [];
       querySnapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Song);
+        list.push({ id: docSnap.id, ...docSnap.data() as any } as Song);
       });
 
       if (list.length > 0) {
@@ -182,10 +195,10 @@ export default function App() {
     }
   };
 
-  // Load initial batch of songs on mount
+  // Load initial batch of songs on mount and tab swap, ensuring synchronization
   useEffect(() => {
     loadInitialSongs();
-  }, []);
+  }, [activeTab]);
 
   // Real-time snapshot synchronized listeners for Playlists and Genres
   useEffect(() => {
@@ -354,17 +367,8 @@ export default function App() {
 
   // Unified submission launcher guard
   const triggerSubmission = (type: 'song' | 'playlist') => {
-    if (!user) {
-      handleGoogleSignIn().then((loggedInUser) => {
-        if (loggedInUser) {
-          setSubmissionType(type);
-          setIsSubmissionModalOpen(true);
-        }
-      });
-    } else {
-      setSubmissionType(type);
-      setIsSubmissionModalOpen(true);
-    }
+    setSubmissionType(type);
+    setIsSubmissionModalOpen(true);
   };
 
   const handleAdminWorkspaceClick = () => {

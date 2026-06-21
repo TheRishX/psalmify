@@ -8,7 +8,7 @@ import {
   Music, Layers, Cloud, Presentation, Plus, Search, Trash2, 
   Edit3, CheckCircle, Clock, Check, AlertCircle, Sparkles, 
   Tv, LogOut, ChevronLeft, ChevronRight, ListMusic, PlusCircle, 
-  HelpCircle, Trash, RefreshCw, X, Wand2 
+  HelpCircle, Trash, RefreshCw, X, Wand2, Database
 } from 'lucide-react';
 import { parseRawLyrics } from '../utils/lyricParser';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,6 +19,7 @@ import DriveSync from './DriveSync';
 import PPTGenerator from './PPTGenerator';
 import SongEditorModal from './SongEditorModal';
 import LyricsFetcher from './LyricsFetcher';
+import MasterBackupManager from './MasterBackupManager';
 
 interface AdminUploaderProps {
   playlists: Playlist[];
@@ -29,7 +30,7 @@ interface AdminUploaderProps {
   genres: Genre[];
 }
 
-type AdminTab = 'songs' | 'playlists' | 'categories' | 'gdrive' | 'fetcher';
+type AdminTab = 'songs' | 'playlists' | 'categories' | 'gdrive' | 'fetcher' | 'backup';
 
 export default function AdminUploader({ 
   playlists, 
@@ -279,7 +280,8 @@ export default function AdminUploader({
     { id: 'playlists', label: 'Playlists Creator', icon: ListMusic, color: 'text-sky-500 bg-sky-50 border-sky-100' },
     { id: 'categories', label: 'Categories Hub', icon: Layers, color: 'text-emerald-500 bg-emerald-50 border-emerald-100' },
     { id: 'gdrive', label: 'GDrive Backups', icon: Cloud, color: 'text-amber-500 bg-amber-50 border-amber-100' },
-    { id: 'fetcher', label: 'Lyrics Fetcher', icon: Sparkles, color: 'text-violet-500 bg-violet-50 border-violet-100' }
+    { id: 'fetcher', label: 'Lyrics Fetcher', icon: Sparkles, color: 'text-violet-500 bg-violet-50 border-violet-100' },
+    { id: 'backup', label: 'Master Backup', icon: Database, color: 'text-rose-500 bg-rose-50 border-rose-100' }
   ];
 
   return (
@@ -620,6 +622,15 @@ export default function AdminUploader({
             genres={genres}
             onRefreshData={onRefreshData}
             user={user}
+          />
+        )}
+
+        {/* TAB 6: MASTER BACKUP IMPORT/EXPORT */}
+        {activeTab === 'backup' && (
+          <MasterBackupManager 
+            songs={songs}
+            playlists={playlists}
+            onRefreshData={onRefreshData}
           />
         )}
 

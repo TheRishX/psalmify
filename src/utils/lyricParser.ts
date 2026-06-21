@@ -26,11 +26,11 @@ export function parseRawLyrics(raw: string): FormattedSection[] {
 
     // Check first line of block for section indicators
     const firstLine = lines[0];
-    const headerRegex = /^\s*[\[\(\{\s]*(Chorus|Verse\s*\d*|Bridge|Hook|Intro|Outro|Stanza|Refrain|Pre-Chorus|PreChorus)[\]\)\}\s]*\s*$/i;
+    const headerRegex = /^\s*[\[\(\{\s]*(Chorus|Verse\s*\d*|Bridge|Hook|Intro|Outro|Stanza|Refrain|Pre-Chorus|PreChorus|Pre\s+Chorus|Tension)[\]\)\}\s]*\s*$/i;
     const headerMatch = firstLine.match(headerRegex);
 
     // Check if the header is inline like "[Verse 1] I sat on the chair"
-    const inlineHeaderRegex = /^\s*[\[\(](Chorus|Verse\s*\d*|Bridge|Hook|Intro|Outro|Stanza|Refrain|Pre-Chorus|PreChorus)[\]\)]\s*(.*)$/i;
+    const inlineHeaderRegex = /^\s*[\[\(](Chorus|Verse\s*\d*|Bridge|Hook|Intro|Outro|Stanza|Refrain|Pre-Chorus|PreChorus|Pre\s+Chorus|Tension)[\]\)]\s*(.*)$/i;
     const inlineMatch = firstLine.match(inlineHeaderRegex);
 
     if (headerMatch) {
@@ -53,6 +53,11 @@ export function parseRawLyrics(raw: string): FormattedSection[] {
         type = 'chorus';
         label = 'CHORUS';
         lyricLines[0] = firstLine.replace(/^chorus:?/i, '').trim();
+        if (!lyricLines[0]) lyricLines.shift();
+      } else if (lowerFirst.startsWith('pre-chorus:') || lowerFirst.startsWith('pre-chorus') || lowerFirst.startsWith('prechorus:') || lowerFirst.startsWith('prechorus') || lowerFirst.startsWith('pre chorus:') || lowerFirst.startsWith('pre chorus') || lowerFirst.startsWith('refrain:') || lowerFirst.startsWith('refrain') || lowerFirst.startsWith('tension:') || lowerFirst.startsWith('tension')) {
+        type = 'tension';
+        label = 'PRE-CHORUS';
+        lyricLines[0] = firstLine.replace(/^(pre-chorus|prechorus|pre\s+chorus|refrain|tension):?/i, '').trim();
         if (!lyricLines[0]) lyricLines.shift();
       } else if (lowerFirst.startsWith('bridge:') || lowerFirst.startsWith('bridge')) {
         type = 'bridge';
@@ -112,7 +117,10 @@ export function parseRawLyrics(raw: string): FormattedSection[] {
 
 function determineSectionType(title: string): FormattedSection['type'] {
   const t = title.toLowerCase();
-  if (t.includes('chorus') || t.includes('refrain') || t.includes('pre-chorus') || t.includes('prechorus')) {
+  if (t.includes('pre-chorus') || t.includes('prechorus') || t.includes('pre chorus') || t.includes('refrain') || t.includes('tension')) {
+    return 'tension';
+  }
+  if (t.includes('chorus')) {
     return 'chorus';
   }
   if (t.includes('bridge')) return 'bridge';
@@ -136,6 +144,7 @@ export function buildHTMLFromSections(sections: FormattedSection[], title: strin
 
   sections.forEach((sec, idx) => {
     const isChorus = sec.type === 'chorus' || sec.type === 'hook';
+    const isTension = sec.type === 'tension';
     const isSpecial = sec.type === 'bridge' || sec.type === 'intro' || sec.type === 'outro';
 
     let blockStyle = `margin-bottom: 24px; padding: 12px; border-radius: 8px;`;
@@ -146,6 +155,10 @@ export function buildHTMLFromSections(sections: FormattedSection[], title: strin
       blockStyle += `background: rgba(56, 189, 248, 0.08); border-left: 4px solid #38bdf8; padding-left: 16px;`;
       labelStyle += `color: #38bdf8; opacity: 1;`;
       linesStyle += `font-weight: 600; font-style: italic; color: #f8fafc; font-size: 15px;`;
+    } else if (isTension) {
+      blockStyle += `background: rgba(245, 158, 11, 0.08); border-left: 4px solid #f59e0b; padding-left: 16px;`;
+      labelStyle += `color: #f59e0b; opacity: 1;`;
+      linesStyle += `font-weight: 600; color: #fef3c7; font-size: 14px;`;
     } else if (isSpecial) {
       blockStyle += `background: rgba(168, 85, 247, 0.08); border-left: 4px solid #a855f7; padding-left: 16px;`;
       labelStyle += `color: #a855f7; opacity: 1;`;

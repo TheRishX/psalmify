@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth, googleProvider, db, OperationType, handleFirestoreError } from '../utils/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { collection, setDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { checkAndCreateFolder } from '../utils/driveSyncHelper';
 
 interface DriveSyncProps {
   songs: Song[];
@@ -86,7 +87,8 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
   const fetchBackupsFromDrive = async (token: string) => {
     setIsListingBackups(true);
     try {
-      const q = encodeURIComponent("name = 'smart_lyrics_backup.json' and trashed = false");
+      const folderId = await checkAndCreateFolder(token);
+      const q = encodeURIComponent(`name = 'psamify_lyrics_backup.json' and '${folderId}' in parents and trashed = false`);
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime,size)&orderBy=createdTime desc`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -120,6 +122,7 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
     setSuccessMsg('');
 
     try {
+      const folderId = await checkAndCreateFolder(accessToken);
       const backupPayload = {
         exportedAt: new Date().toISOString(),
         songs: songs,
@@ -127,7 +130,7 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
         appVersion: '3.0.0-enterprise'
       };
 
-      // 1. Create metadata on Google Drive
+      // 1. Create metadata on Google Drive inside corporate folder
       const metaRes = await fetch("https://www.googleapis.com/drive/v3/files", {
         method: "POST",
         headers: {
@@ -135,8 +138,9 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          name: "smart_lyrics_backup.json",
+          name: "psamify_lyrics_backup.json",
           mimeType: "application/json",
+          parents: [folderId],
           description: `Total of ${songs.length} lyric items and ${playlists.length} playlists backed up via Lyrics Dashboard.`
         })
       });
@@ -239,6 +243,7 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
   const handleExportSingleSong = async (song: Song) => {
     if (!accessToken) return;
     try {
+      const folderId = await checkAndCreateFolder(accessToken);
       const fileContent = `TITLE: ${song.title}\nARTIST: ${song.artist}\nALBUM: ${song.album || 'N/A'}\nGENRE: ${song.genre}\n========================================\n\n${song.rawLyrics}\n\n========================================\nBackups crafted via Smart Lyrics System.`;
       
       const metaRes = await fetch("https://www.googleapis.com/drive/v3/files", {
@@ -249,7 +254,8 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
         },
         body: JSON.stringify({
           name: `${song.title.replace(/[\s\/]+/g, '_')}_raw_lyrics.txt`,
-          mimeType: "text/plain"
+          mimeType: "text/plain",
+          parents: [folderId]
         })
       });
       const meta = await metaRes.json();
@@ -378,7 +384,7 @@ export default function DriveSync({ songs, playlists, onRefreshData }: DriveSync
                   <h4>Google Drive Backups Stack</h4>
                 </div>
                 <p className="text-slate-500 text-xs leading-relaxed">
-                  List of valid `smart_lyrics_backup.json` configuration blocks discovered on your Cloud account. Select a package to restore:
+                  List of valid `psamify_lyrics_backup.json` configuration blocks discovered on your Cloud account. Select a package to restore:
                 </p>
 
                 <div className="flex-1 overflow-y-auto max-h-[140px] border border-slate-200/60 rounded-xl bg-white mt-2">

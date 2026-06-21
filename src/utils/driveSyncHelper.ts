@@ -1,12 +1,12 @@
 import { Song } from '../types';
 
 /**
- * Ensures that the folder "Psamify Lyrics Database" exists in Google Drive.
+ * Ensures that the folder "Psamify Lyrics" exists in Google Drive.
  * Return: Folder ID string.
  */
 export async function checkAndCreateFolder(token: string): Promise<string> {
   try {
-    const q = encodeURIComponent("name = 'Psamify Lyrics Database' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+    const q = encodeURIComponent("name = 'Psamify Lyrics' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
     const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -23,7 +23,7 @@ export async function checkAndCreateFolder(token: string): Promise<string> {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: "Psamify Lyrics Database",
+        name: "Psamify Lyrics",
         mimeType: "application/vnd.google-apps.folder"
       })
     });

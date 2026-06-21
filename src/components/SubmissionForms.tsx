@@ -19,23 +19,24 @@ interface SubmitSongFormProps {
 export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }: SubmitSongFormProps) {
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
-  const [album, setAlbum] = useState('');
-  const [genre, setGenre] = useState('Contemporary');
-  const [duration, setDuration] = useState('3:30');
   const [rawLyrics, setRawLyrics] = useState('');
-  const [coverUrl, setCoverUrl] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [rawLyricsHindi, setRawLyricsHindi] = useState('');
+  const [formLanguageTab, setFormLanguageTab] = useState<'english' | 'hindi'>('english');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const genres = inputGenres && inputGenres.length > 0
-    ? inputGenres
-    : ['Contemporary', 'Hymn', 'Synthwave', 'Bluegrass', 'Lofi Pop', 'Rock', 'Acoustic'];
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !artist.trim() || !rawLyrics.trim()) {
-      setError('Please provide title, artist, and raw lyrics.');
+    if (!title.trim()) {
+      setError('Please provide the Song Title.');
+      return;
+    }
+    
+    const hasEnglish = rawLyrics.trim().length > 0;
+    const hasHindi = rawLyricsHindi.trim().length > 0;
+    
+    if (!hasEnglish && !hasHindi) {
+      setError('Please provide song lyrics in at least one language (English or Hindi Devanagari).');
       return;
     }
 
@@ -43,44 +44,46 @@ export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }
     setError('');
 
     try {
-      // Parse the raw lyrics on client side to format section list
-      const formatted = parseRawLyrics(rawLyrics);
+      // Parse whichever lyrics are provided
+      const formatted = hasEnglish ? parseRawLyrics(rawLyrics) : [];
+      const formattedHindi = hasHindi ? parseRawLyrics(rawLyricsHindi) : [];
 
-      let resolvedCover = coverUrl.trim();
-      if (!resolvedCover) {
-        try {
-          const coverRes = await fetch("/api/gemini/generate-cover", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: title.trim(), artist: artist.trim(), genre })
-          });
-          if (coverRes.ok) {
-            const coverData = await coverRes.json();
-            if (coverData.success && coverData.url) {
-              resolvedCover = coverData.url;
-            }
+      let resolvedCover = "https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400&q=80";
+      try {
+        const coverRes = await fetch("/api/gemini/generate-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            title: title.trim(), 
+            artist: artist.trim() || 'Traditional', 
+            genre: 'Contemporary' 
+          })
+        });
+        if (coverRes.ok) {
+          const coverData = await coverRes.json();
+          if (coverData.success && coverData.url) {
+            resolvedCover = coverData.url;
           }
-        } catch (coverErr) {
-          console.warn("AI cover art generation exception, falling back to unsplash placeholder:", coverErr);
         }
-      }
-      if (!resolvedCover) {
-        resolvedCover = "https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400&q=80";
+      } catch (coverErr) {
+        console.warn("AI cover art generation exception, falling back to placeholder:", coverErr);
       }
 
       await addDoc(collection(db, "songs"), {
         title: title.trim(),
-        artist: artist.trim(),
-        album: album.trim() || null,
-        genre,
-        duration: duration.trim() || "3:30",
+        artist: artist.trim() || "Unknown Artist",
+        album: "Community Contribution",
+        genre: "Contemporary",
+        duration: "3:30",
         rawLyrics: rawLyrics,
         formattedLyrics: formatted,
+        rawLyricsHindi: rawLyricsHindi,
+        formattedLyricsHindi: formattedHindi,
         coverUrl: resolvedCover,
-        youtubeUrl: youtubeUrl.trim() || null,
+        youtubeUrl: null,
         status: 'pending', // Goes to moderation desk
-        submittedBy: user.email,
-        submittedByName: user.displayName || user.email.split('@')[0],
+        submittedBy: user ? user.email : 'guest',
+        submittedByName: user ? (user.displayName || user.email.split('@')[0]) : 'Guest Collaborator',
         createdAt: new Date().toISOString()
       }).catch((error) => {
         handleFirestoreError(error, OperationType.CREATE, "songs");
@@ -96,131 +99,124 @@ export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }
   };
 
   return (
-    <div className="space-y-5">
-      <div className="border-b border-slate-100 pb-4">
+    <div className="space-y-4" id="submit-song-proposal-root">
+      <div className="border-b border-slate-100 pb-3">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
           <Music className="w-5 h-5 text-rose-500" />
           Submit Track Lyrics Proposal
         </h3>
         <p className="text-xs text-slate-500 mt-1">
-          Your lyric submission will go to the moderation queue. Upon administrator approval, it will go live in the public catalog.
+          Provide the track name and paste lyric sheets in English, Hindi/Devanagari, or both. Your submission will instantly enter the administrator desk queue for approval.
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 flex items-start gap-2.5">
+        <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-xs text-rose-700 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <p className="leading-relaxed">{error}</p>
+          <p className="leading-relaxed font-medium">{error}</p>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Song Title *</label>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Core Song Info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">Song Title / Name *</span>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Amazing Grace"
-              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono"
+              placeholder="e.g. He is Yahweh"
+              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono transition"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Artist / Band Name *</label>
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">Artist Name (Optional)</span>
             <input
               type="text"
-              required
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
-              placeholder="e.g. John Newton"
-              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Album (Optional)</label>
-            <input
-              type="text"
-              value={album}
-              onChange={(e) => setAlbum(e.target.value)}
-              placeholder="e.g. Traditional Hymns Collection"
-              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Genre</label>
-              <select
-                value={genre}
-                onChange={(e) => setGenre(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono capitalize"
-              >
-                {genres.map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Duration</label>
-              <input
-                type="text"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="e.g. 3:45"
-                className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block flex items-center justify-between">
-            <span>Raw Track Lyrics *</span>
-            <span className="text-[9px] font-normal tracking-normal text-slate-400 lowercase italic">Use labels: [Verse 1], [Chorus], [Bridge]</span>
-          </label>
-          <textarea
-            required
-            rows={8}
-            value={rawLyrics}
-            onChange={(e) => setRawLyrics(e.target.value)}
-            placeholder="[Intro]&#10;(Soft piano chords)&#10;&#10;[Verse 1]&#10;Amazing grace! How sweet the sound&#10;That saved a wretch like me!&#10;&#10;[Chorus]&#10;My chains are gone, I've been set free!&#10;My God, my Savior has ransomed me!&#10;And like a flood His mercy reigns..."
-            className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-3 text-xs font-mono leading-relaxed resize-y min-h-[160px]"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Media / YouTube Video URL</label>
-            <input
-              type="url"
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              placeholder="e.g. https://www.youtube.com/watch?v=..."
-              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">Cover Image URL (Direct)</label>
-            <input
-              type="url"
-              value={coverUrl}
-              onChange={(e) => setCoverUrl(e.target.value)}
-              placeholder="e.g. https://images.unsplash.com/promo..."
-              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono"
+              placeholder="e.g. Steve Kuban"
+              className="w-full bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white outline-none rounded-xl p-2.5 text-xs font-mono transition"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        {/* Dual Language Tab Selection */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">Track Lyrics Input Sheets</span>
+            <span className="text-[9px] font-normal text-slate-400 lowercase italic">use tags like [Verse 1], [Chorus], [Bridge]</span>
+          </div>
+
+          {/* Interactive Toggle Pill Bar */}
+          <div className="p-1 bg-slate-100 rounded-xl flex gap-1 w-full relative">
+            <button
+              type="button"
+              onClick={() => setFormLanguageTab('english')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition duration-200 relative z-10 ${
+                formLanguageTab === 'english'
+                  ? 'bg-white shadow-xs text-slate-900 border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+               English Lyrics Version {rawLyrics.trim() && '•'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormLanguageTab('hindi')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition duration-200 relative z-10 ${
+                formLanguageTab === 'hindi'
+                  ? 'bg-white shadow-xs text-slate-900 border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Hindi Devanagari Version {rawLyricsHindi.trim() && '•'}
+            </button>
+          </div>
+
+          {/* Tab Panes */}
+          <div className="relative overflow-hidden min-h-[220px] bg-slate-50 border border-slate-250/70 rounded-2xl">
+            {formLanguageTab === 'english' ? (
+              <div className="p-3.5 space-y-2">
+                <span className="text-[9px] font-mono tracking-wider font-bold text-indigo-500 uppercase flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                  English Lyrics Sheet
+                </span>
+                <textarea
+                  rows={8}
+                  value={rawLyrics}
+                  onChange={(e) => setRawLyrics(e.target.value)}
+                  placeholder="[Intro]&#10;(Acoustic chords)&#10;&#10;[Verse 1]&#10;Who is like Him, the Lion and the Lamb?&#10;Seated on the throne...&#10;&#10;[Chorus]&#10;He is Yahweh, He is Yahweh!&#10;Lord of Creation, awesome in power..."
+                  className="w-full bg-transparent focus:bg-white/40 border-0 outline-none text-xs font-mono leading-relaxed resize-y max-h-[300px]"
+                />
+              </div>
+            ) : (
+              <div className="p-3.5 space-y-2">
+                <span className="text-[9px] font-mono tracking-wider font-bold text-rose-500 uppercase flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                  Hindi Devanagari Lyrics Sheet
+                </span>
+                <textarea
+                  rows={8}
+                  value={rawLyricsHindi}
+                  onChange={(e) => setRawLyricsHindi(e.target.value)}
+                  placeholder="[Intro]&#10;(धून शुरू होती है)&#10;&#10;[Verse 1]&#10;यहोवा की स्तुति करो उसके पवित्र स्थान में,&#10;उसका सुसमाचार सारे जगत में सुनाओ...&#10;&#10;[Chorus]&#10;वह महान है, वह यहोवा है!&#10;सृष्टि का स्वामी, सामर्थ्य से भरा..."
+                  className="w-full bg-transparent focus:bg-white/40 border-0 outline-none text-xs font-mono leading-relaxed resize-y max-h-[300px]"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center justify-end gap-3 pt-3.5 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-mono hover:bg-slate-55 transition"
+            className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-mono hover:bg-slate-50 transition"
           >
             Cancel
           </button>
@@ -228,16 +224,16 @@ export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-mono font-bold hover:bg-slate-800 disabled:opacity-50 transition flex items-center gap-1.5"
+            className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-mono font-bold hover:bg-slate-800 disabled:opacity-50 transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-slate-900/10"
           >
             {isSubmitting ? (
               <>
                 <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Submitting Track...</span>
+                <span>Submitting Proposal...</span>
               </>
             ) : (
               <>
-                <span>Submit Track Proposals</span>
+                <span>Submit to Moderator</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </>
             )}
@@ -288,8 +284,8 @@ export function SubmitPlaylistForm({ user, songs, onClose, onSuccess }: SubmitPl
         coverUrl: playlistCoverUrl.trim() || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
         songIds: selectedSongIds,
         status: 'pending',
-        submittedBy: user.email,
-        submittedByName: user.displayName || user.email.split('@')[0],
+        submittedBy: user ? user.email : 'guest',
+        submittedByName: user ? (user.displayName || user.email.split('@')[0]) : 'Guest Collaborator',
         createdAt: new Date().toISOString()
       }).catch((error) => {
         handleFirestoreError(error, OperationType.CREATE, "playlists");

@@ -37,6 +37,22 @@ function cleanMarkdownBlocks(text: string): string {
 const app = express();
 app.use(express.json({ limit: '10mb' })); // support higher payload sizes for images
 
+// Support Vercel API routing: rewrite req.url if routed by vercel.json rewrite
+app.use((req, res, next) => {
+  if (req.url && req.url.includes("__vercel_api_path=")) {
+    try {
+      const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const apiPath = urlObj.searchParams.get("__vercel_api_path");
+      if (apiPath) {
+        req.url = apiPath;
+      }
+    } catch (e) {
+      console.warn("Vercel route query rewrite error:", e);
+    }
+  }
+  next();
+});
+
 // ==========================================
 // AESTHETIC COVER ART LISTS (FALLBACK ENGINE)
 // ==========================================
@@ -502,7 +518,9 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL && !process.env.NOW_REGION) {
+  startServer();
+}
 
 export { app };
 export default app;

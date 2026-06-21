@@ -19,7 +19,7 @@ export interface Song {
 }
 
 export interface FormattedSection {
-  type: 'verse' | 'chorus' | 'bridge' | 'hook' | 'intro' | 'outro' | 'stanza';
+  type: 'verse' | 'chorus' | 'bridge' | 'hook' | 'intro' | 'outro' | 'stanza' | 'tension';
   label: string;
   lines: string[];
 }

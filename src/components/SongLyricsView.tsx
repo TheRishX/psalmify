@@ -27,6 +27,8 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
   const [lyricFontSize, setLyricFontSize] = useState<number>(20); // default 20px
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [autoScrollActive, setAutoScrollActive] = useState<boolean>(true);
+  const [readerTheme, setReaderTheme] = useState<'light' | 'dark' | 'sepia'>('light');
+  const [hindiFont, setHindiFont] = useState<'poppins' | 'rajdhani' | 'yatra' | 'rozha' | 'arima' | 'martel'>('poppins');
 
   // Bilingual translation & tabs management
   const [lyricsLanguageTab, setLyricsLanguageTab] = useState<'english' | 'hindi'>('english');
@@ -193,15 +195,23 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
   // Handle smooth scroll assist when lyrics sequence moves forward
   useEffect(() => {
     if (autoScrollActive && activeLineIndex !== -1) {
-      const activeLineElem = document.getElementById(`lyric-line-global-${activeLineIndex}`);
-      if (activeLineElem) {
-        activeLineElem.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        });
-      }
+      const targetId = isFullScreen 
+        ? `fullscreen-lyric-line-global-${activeLineIndex}` 
+        : `lyric-line-global-${activeLineIndex}`;
+      
+      const scrollTimer = setTimeout(() => {
+        const activeLineElem = document.getElementById(targetId);
+        if (activeLineElem) {
+          activeLineElem.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        }
+      }, 100);
+
+      return () => clearTimeout(scrollTimer);
     }
-  }, [activeLineIndex, autoScrollActive]);
+  }, [activeLineIndex, autoScrollActive, isFullScreen]);
 
   const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCurrentTime(Number(e.target.value));
@@ -345,6 +355,43 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                 </button>
               </div>
 
+              {/* Reading Theme Selector */}
+              <div className="flex items-center gap-1 bg-slate-100 border border-slate-250/50 p-1 rounded-lg">
+                <button
+                  onClick={() => setReaderTheme('light')}
+                  className={`px-2 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
+                    readerTheme === 'light' 
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/50' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                  title="Light Mode"
+                >
+                  Light
+                </button>
+                <button
+                  onClick={() => setReaderTheme('sepia')}
+                  className={`px-2 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
+                    readerTheme === 'sepia' 
+                      ? 'bg-[#fadcb8]/50 text-[#543b18] shadow-xs border border-[#cfbca1]' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                  title="Sepia Mode"
+                >
+                  Sepia
+                </button>
+                <button
+                  onClick={() => setReaderTheme('dark')}
+                  className={`px-2 py-1 text-[10px] font-mono font-bold rounded transition-all cursor-pointer ${
+                    readerTheme === 'dark' 
+                      ? 'bg-slate-950 text-white shadow-xs border border-slate-850' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                  title="Dark Mode"
+                >
+                  Dark
+                </button>
+              </div>
+
               {/* YouTube fallback */}
               {song.youtubeUrl && (
                 <a 
@@ -461,7 +508,13 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
         </div>
 
         {/* Dynamic Lyrics sheet board */}
-        <div id="lyrics-sheet-card" className="bg-white border border-slate-200/90 rounded-2xl p-6 md:p-8 relative overflow-hidden shadow-sm">
+        <div id="lyrics-sheet-card" className={`border rounded-2xl p-6 md:p-8 relative overflow-hidden shadow-sm transition-all duration-300 ${
+          readerTheme === 'dark'
+            ? 'bg-slate-950 border-slate-800 text-slate-100'
+            : readerTheme === 'sepia'
+              ? 'bg-[#faf4e8] border-[#e5d9c0] text-[#3e2c14]'
+              : 'bg-white border-slate-200/90 text-slate-800'
+        }`}>
           <AnimatePresence mode="wait">
             {showRaw ? (
               // RAW CODE TYPE WRITER STYLE
@@ -476,7 +529,9 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                   <span className="text-slate-500 font-bold block">RAW SONG SOURCE ENTRY</span>
                   <span className="text-[9px] text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded bg-slate-50 font-bold">MONOSPACE</span>
                 </div>
-                <pre className="whitespace-pre-wrap leading-relaxed max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+                <pre className={`whitespace-pre-wrap leading-relaxed max-h-[450px] overflow-y-auto pr-2 custom-scrollbar ${
+                  readerTheme === 'dark' ? 'text-slate-300' : readerTheme === 'sepia' ? 'text-[#5a462e]' : 'text-slate-500'
+                }`}>
                   {lyricsLanguageTab === 'english' ? song.rawLyrics : activeRawLyricsHindi || "No Hindi translations available."}
                 </pre>
               </motion.div>
@@ -490,43 +545,112 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                 className="space-y-6"
               >
                 <div className="text-center mb-4">
-                  <h2 className="text-2xl md:text-3xl font-serif font-black mb-1 text-slate-900 tracking-tight">{song.title}</h2>
-                  <p className="text-xs text-slate-400 tracking-[0.2em] font-sans uppercase">BY {song.artist}</p>
+                  <h2 className={`text-2xl md:text-3xl font-serif font-black mb-1 tracking-tight ${
+                    readerTheme === 'dark' 
+                      ? 'text-white' 
+                      : readerTheme === 'sepia'
+                        ? 'text-[#3e2c14]' 
+                        : 'text-slate-900'
+                  }`}>{song.title}</h2>
+                  <p className={`text-xs tracking-[0.2em] font-sans uppercase ${
+                    readerTheme === 'sepia' ? 'text-[#87745d]' : 'text-slate-400'
+                  }`}>BY {song.artist}</p>
                 </div>
 
                 {/* Elegant Dual-Language Tab Selectors with micro-interactions */}
-                <div className="flex justify-center gap-2.5 pb-4 border-b border-slate-100">
-                  <button
-                    onClick={() => setLyricsLanguageTab('english')}
-                    className={`px-5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase flex items-center gap-2 cursor-pointer ${
-                      lyricsLanguageTab === 'english'
-                        ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10 scale-105'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
-                    }`}
-                  >
-                    🇬🇧 English Default
-                  </button>
+                <div className="flex flex-col gap-4 pb-4 border-b border-slate-100">
+                  <div className="flex justify-center gap-2.5">
+                    <button
+                      onClick={() => setLyricsLanguageTab('english')}
+                      className={`px-5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase flex items-center gap-2 cursor-pointer ${
+                        lyricsLanguageTab === 'english'
+                          ? readerTheme === 'dark'
+                            ? 'bg-white text-slate-950 shadow-lg scale-105'
+                            : 'bg-slate-900 text-white shadow-lg shadow-slate-900/10 scale-105'
+                          : readerTheme === 'dark'
+                            ? 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+                            : readerTheme === 'sepia'
+                              ? 'bg-[#ebdca5]/30 hover:bg-[#ebdca5]/60 text-[#54432a] border border-[#cfc19f]'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
+                      }`}
+                    >
+                      🇬🇧 English Default
+                    </button>
 
-                  <button
-                    onClick={() => setLyricsLanguageTab('hindi')}
-                    className={`px-5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase flex items-center gap-2 cursor-pointer ${
-                      lyricsLanguageTab === 'hindi'
-                        ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/10 scale-105'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
-                    }`}
-                  >
-                    🇮🇳 Hindi Version (हिंदी)
-                  </button>
+                    <button
+                      onClick={() => setLyricsLanguageTab('hindi')}
+                      className={`px-5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase flex items-center gap-2 cursor-pointer ${
+                        lyricsLanguageTab === 'hindi'
+                          ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/10 scale-105'
+                          : readerTheme === 'dark'
+                            ? 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+                            : readerTheme === 'sepia'
+                              ? 'bg-[#ebdca5]/30 hover:bg-[#ebdca5]/60 text-[#54432a] border border-[#cfc19f]'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
+                      }`}
+                    >
+                      🇮🇳 Hindi Version (हिंदी)
+                    </button>
+                  </div>
+
+                  {/* Phone Optimized Hindi Font options */}
+                  {lyricsLanguageTab === 'hindi' && activeFormattedLyricsHindi.length > 0 && (
+                    <div id="hindi-font-selector" className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2 border-t border-dashed border-slate-100 animate-fadeIn">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                        🇮🇳 Select Hindi Font Style:
+                      </span>
+                      <div className="flex flex-wrap justify-center gap-1 p-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+                        {[
+                          { id: 'poppins', label: 'Poppins (Sans)' },
+                          { id: 'rajdhani', label: 'Rajdhani (Tech)' },
+                          { id: 'yatra', label: 'Yatra (Calligraphy)' },
+                          { id: 'rozha', label: 'Rozha (Bold Editorial)' },
+                          { id: 'arima', label: 'Arima (Soft/Warm)' },
+                          { id: 'martel', label: 'Martel (Traditional Serif)' }
+                        ].map((fontItem) => (
+                          <button
+                            key={fontItem.id}
+                            onClick={() => setHindiFont(fontItem.id as any)}
+                            className={`px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-medium transition-all duration-150 cursor-pointer select-none ${
+                              hindiFont === fontItem.id
+                                ? 'bg-rose-600 text-white font-bold shadow-xs'
+                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-100 font-sans'
+                            }`}
+                          >
+                            {fontItem.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {lyricsLanguageTab === 'hindi' && activeFormattedLyricsHindi.length === 0 ? (
-                  <div className="bg-gradient-to-br from-rose-50/50 to-amber-50/30 border border-rose-100 rounded-3xl p-8 text-center max-w-md mx-auto space-y-4 shadow-sm my-8">
+                  <div className={`border rounded-3xl p-8 text-center max-w-md mx-auto space-y-4 shadow-sm my-8 ${
+                    readerTheme === 'dark'
+                      ? 'from-rose-950/20 to-amber-950/20 border-rose-900 bg-slate-900'
+                      : readerTheme === 'sepia'
+                        ? 'from-[#ebdca5]/30 to-[#eadebe]/30 border-[#cfc19f] bg-[#ece0c4]/40'
+                        : 'bg-gradient-to-br from-rose-50/50 to-amber-50/30 border-rose-100'
+                  }`}>
                     <div className="w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-600 mx-auto shadow-sm">
                       <Sparkles className="w-5 h-5 animate-pulse" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 leading-tight">Hindi lyrics have not been synced yet</h4>
-                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                      <h4 className={`font-bold leading-tight ${
+                        readerTheme === 'dark'
+                          ? 'text-white'
+                          : readerTheme === 'sepia'
+                            ? 'text-[#3e2c14]'
+                            : 'text-slate-900'
+                      }`}>Hindi lyrics have not been synced yet</h4>
+                      <p className={`text-xs mt-1.5 leading-relaxed ${
+                        readerTheme === 'dark'
+                          ? 'text-slate-450'
+                          : readerTheme === 'sepia'
+                            ? 'text-[#7d684e]'
+                            : 'text-slate-500'
+                      }`}>
                         No translation is configured for this song. Tap to invoke the Gemini API to analyze and translate the lyrics to Devanagari Hindi instantly!
                       </p>
                     </div>
@@ -551,42 +675,140 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                 ) : (
                   (lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi).map((section, sIdx) => {
                     const isChorus = section.type === 'chorus';
+                    const isTension = section.type === 'tension';
                     const isBridge = section.type === 'bridge';
                     const isHook = section.type === 'hook';
                     const isIntro = section.type === 'intro' || section.type === 'outro';
                     const isSectionActive = activeSectionIndex === sIdx;
 
-                    // BEAUTIFUL HIGH-CONTRAST HIGHLIGHTS FOR DIFFERENT BLOCK TYPES
-                    let containerClass = "relative rounded-xl border transition-all duration-300 p-5 ";
-                    let headerClass = "text-[10px] font-bold tracking-wider font-mono mb-3 uppercase flex items-center justify-between ";
-                    let lineClass = "leading-relaxed tracking-wide transition-all duration-200 ";
+                    const themeStyles = {
+                      light: {
+                        chorus: {
+                          bg: isSectionActive ? "bg-emerald-50 border-emerald-300 shadow-md ring-1 ring-emerald-500/10" : "bg-emerald-50/10 border-emerald-100 hover:border-emerald-250/20 hover:bg-emerald-50/20",
+                          header: "text-emerald-700",
+                          line: "text-slate-900 font-semibold italic",
+                          borderLeft: "border-l-emerald-550"
+                        },
+                        tension: {
+                          bg: isSectionActive ? "bg-orange-100 hover:bg-orange-100 border-orange-300 shadow-md ring-1 ring-orange-500/10" : "bg-orange-50/15 border-orange-100 hover:border-orange-200 hover:bg-orange-50/30",
+                          header: "text-orange-700 font-extrabold",
+                          line: "text-slate-900 font-medium",
+                          borderLeft: "border-l-orange-500"
+                        },
+                        bridge: {
+                          bg: isSectionActive ? "bg-amber-50/60 border-amber-300 shadow-md ring-1 ring-amber-500/10" : "bg-amber-50/10 border-amber-100 hover:border-amber-250/50 hover:bg-amber-50/20",
+                          header: "text-amber-850",
+                          line: "text-slate-900 font-serif italic",
+                          borderLeft: "border-l-amber-500"
+                        },
+                        intro: {
+                          bg: "bg-slate-50 border-slate-100",
+                          header: "text-slate-400",
+                          line: "text-slate-500 font-mono",
+                          borderLeft: "border-l-slate-300"
+                        },
+                        standard: {
+                          bg: isSectionActive ? "bg-violet-50/80 border-violet-300 shadow-md ring-1 ring-violet-500/10" : "bg-violet-50/10 border-violet-100/70 hover:border-violet-200 hover:bg-violet-50/20",
+                          header: "text-violet-700",
+                          line: "text-slate-800 font-sans",
+                          borderLeft: "border-l-violet-400"
+                        }
+                      },
+                      dark: {
+                        chorus: {
+                          bg: isSectionActive ? "bg-emerald-950/40 border-emerald-700 shadow-md ring-1 ring-emerald-500/20" : "bg-emerald-950/10 border-emerald-900/60 hover:bg-emerald-950/20 hover:border-emerald-800",
+                          header: "text-emerald-400",
+                          line: "text-emerald-100 font-semibold italic",
+                          borderLeft: "border-l-emerald-600"
+                        },
+                        tension: {
+                          bg: isSectionActive ? "bg-orange-950/50 border-orange-700 shadow-md ring-1 ring-orange-500/25" : "bg-orange-950/15 border-orange-900/40 hover:bg-orange-950/30 hover:border-orange-800",
+                          header: "text-orange-400 font-extrabold",
+                          line: "text-orange-100 font-medium",
+                          borderLeft: "border-l-orange-550"
+                        },
+                        bridge: {
+                          bg: isSectionActive ? "bg-amber-950/40 border-amber-700 shadow-md ring-1 ring-amber-500/20" : "bg-amber-950/10 border-amber-900/60 hover:bg-amber-950/20 hover:border-amber-805",
+                          header: "text-amber-400",
+                          line: "text-amber-100 font-serif italic",
+                          borderLeft: "border-l-amber-600"
+                        },
+                        intro: {
+                          bg: "bg-slate-900/60 border-slate-800",
+                          header: "text-slate-500",
+                          line: "text-slate-400 font-mono",
+                          borderLeft: "border-l-slate-600"
+                        },
+                        standard: {
+                          bg: isSectionActive ? "bg-violet-950/40 border-violet-700 shadow-md ring-1 ring-violet-500/20" : "bg-violet-950/10 border-violet-900/60 hover:bg-violet-950/20 hover:border-violet-800",
+                          header: "text-violet-400",
+                          line: "text-slate-300 font-sans",
+                          borderLeft: "border-l-violet-500"
+                        }
+                      },
+                      sepia: {
+                        chorus: {
+                          bg: isSectionActive ? "bg-[#e2d5bd] border-[#c0af8b] shadow-md ring-1 ring-[#a48e65]/10" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
+                          header: "text-[#1d4122] font-bold",
+                          line: "text-[#332210] font-semibold italic",
+                          borderLeft: "border-l-emerald-705"
+                        },
+                        tension: {
+                          bg: isSectionActive ? "bg-[#f5e3d3] border-[#d8b08d] shadow-md ring-1 ring-[#c08d5c]/15" : "bg-[#f5e3d3]/25 border-[#eed5be] hover:bg-[#f5e3d3]/50 hover:border-[#d9af88]",
+                          header: "text-orange-900 font-extrabold",
+                          line: "text-[#3e2305] font-medium",
+                          borderLeft: "border-l-orange-500"
+                        },
+                        bridge: {
+                          bg: isSectionActive ? "bg-[#ebdca5] border-[#c8b788] shadow-md ring-1 ring-[#a89564]/10" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
+                          header: "text-amber-950",
+                          line: "text-[#332210] font-serif italic",
+                          borderLeft: "border-l-amber-700"
+                        },
+                        intro: {
+                          bg: "bg-[#eadebe]/40 border-[#d0c19b]",
+                          header: "text-[#857053]",
+                          line: "text-[#6d5b43] font-mono",
+                          borderLeft: "border-l-[#a09070]"
+                        },
+                        standard: {
+                          bg: isSectionActive ? "bg-[#ece0c4] border-[#cfc19e] shadow-md ring-1 ring-[#af9e7a]/10" : "bg-[#ece0c4]/30 border-[#e5d9bd] hover:bg-[#ece0c4]/50 hover:border-[#cfc19e]",
+                          header: "text-violet-900",
+                          line: "text-[#403019] font-sans",
+                          borderLeft: "border-l-violet-700"
+                        }
+                      }
+                    };
 
+                    const activeTheme = themeStyles[readerTheme];
+                    let currentSectionStyles;
                     if (isChorus) {
-                      containerClass += isSectionActive
-                        ? "bg-emerald-50 border-emerald-300 shadow-md ring-2 ring-emerald-500/10 " 
-                        : "bg-emerald-50/10 border-emerald-100 hover:border-emerald-200 hover:bg-emerald-50/20 ";
-                      containerClass += "border-l-4 border-l-emerald-500 pl-5";
-                      headerClass += "text-emerald-700";
-                      lineClass += "italic font-semibold text-slate-900 ";
+                      currentSectionStyles = activeTheme.chorus;
+                    } else if (isTension) {
+                      currentSectionStyles = activeTheme.tension;
                     } else if (isBridge || isHook) {
-                      containerClass += isSectionActive
-                        ? "bg-amber-50/60 border-amber-300 shadow-md ring-2 ring-amber-500/10 "
-                        : "bg-amber-50/10 border-amber-100 hover:border-amber-250/50 hover:bg-amber-50/20 ";
-                      containerClass += "border-l-4 border-l-amber-500 pl-5";
-                      headerClass += "text-amber-850";
-                      lineClass += "font-serif italic text-slate-900 ";
+                      currentSectionStyles = activeTheme.bridge;
                     } else if (isIntro) {
-                      containerClass += "bg-slate-50 border-slate-100 border-l-4 border-l-slate-300 pl-5 ";
-                      headerClass += "text-slate-400";
-                      lineClass += "text-slate-500 font-mono ";
+                      currentSectionStyles = activeTheme.intro;
                     } else {
-                      // Standard Stanzas / Verses (Soft Elegant Violet Palette)
-                      containerClass += isSectionActive
-                        ? "bg-violet-50/80 border-violet-300 shadow-md ring-2 ring-violet-500/10 "
-                        : "bg-violet-50/10 border-violet-100/70 hover:border-violet-200 hover:bg-violet-50/20 ";
-                      containerClass += "border-l-4 border-l-violet-400 pl-5";
-                      headerClass += "text-violet-700";
-                      lineClass += "text-slate-800 font-sans ";
+                      currentSectionStyles = activeTheme.standard;
+                    }
+
+                    // BEAUTIFUL HIGH-CONTRAST HIGHLIGHTS FOR DIFFERENT BLOCK TYPES
+                    let containerClass = `relative rounded-xl border transition-all duration-300 p-5 ${currentSectionStyles.bg} border-l-4 ${currentSectionStyles.borderLeft} pl-5 `;
+                    let headerClass = `text-[10px] font-bold tracking-wider font-mono mb-3 uppercase flex items-center justify-between ${currentSectionStyles.header} `;
+                    let lineClass = `leading-relaxed tracking-wide transition-all duration-200 ${currentSectionStyles.line} `;
+
+                    // Dynamic font selection for Devanagari vs Default
+                    const isHindiActive = lyricsLanguageTab === 'hindi';
+                    let fontClass = 'font-sans';
+                    if (isHindiActive) {
+                      if (hindiFont === 'poppins') fontClass = 'font-hindi-poppins';
+                      else if (hindiFont === 'rajdhani') fontClass = 'font-hindi-rajdhani';
+                      else if (hindiFont === 'yatra') fontClass = 'font-hindi-yatra';
+                      else if (hindiFont === 'rozha') fontClass = 'font-hindi-rozha';
+                      else if (hindiFont === 'arima') fontClass = 'font-hindi-arima';
+                      else if (hindiFont === 'martel') fontClass = 'font-hindi-martel';
                     }
 
                     return (
@@ -606,12 +828,13 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
                         <div className={headerClass}>
                           <div className="flex items-center gap-1.5 font-bold">
                             {isChorus && <Sparkles className="w-3.5 h-3.5 text-emerald-500" />}
-                            {!isChorus && <Music className="w-3.5 h-3.5 text-violet-400" />}
+                            {isTension && <Sparkles className="w-3.5 h-3.5 text-orange-500" />}
+                            {!isChorus && !isTension && <Music className="w-3.5 h-3.5 text-violet-400" />}
                             <span>{section.label}</span>
                           </div>
                           {isSectionActive && (
                             <span className="text-[8px] font-mono bg-slate-900 text-white font-bold px-1.5 py-0.5 rounded leading-none shadow-sm flex items-center gap-1">
-                              <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                               TRACKER HIGHLIGHT
                             </span>
                           )}
@@ -628,16 +851,25 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
 
                             const isLineActive = activeLineIndex === globalLineIdx;
 
+                            const getHighlightClass = () => {
+                              if (!isLineActive) return 'opacity-90';
+                              switch (readerTheme) {
+                                case 'dark':
+                                  return 'text-amber-200 bg-amber-950/70 px-2.5 py-1.5 rounded-xl border-l-2 border-l-amber-500 scale-[1.01] font-bold shadow-md';
+                                case 'sepia':
+                                  return 'text-[#543b18] bg-[#ebdca5] px-2.5 py-1.5 rounded-xl border-l-2 border-l-amber-700 scale-[1.01] font-bold shadow-md';
+                                case 'light':
+                                  default:
+                                  return 'text-amber-900 bg-amber-50 px-2.5 py-1.5 rounded-xl border-l-2 border-l-amber-500 scale-[1.01] font-bold shadow-sm';
+                              }
+                            };
+
                             return (
                               <p
                                 key={lIdx}
                                 id={`lyric-line-global-${globalLineIdx}`}
                                 style={{ fontSize: `${lyricFontSize}px` }}
-                                className={`${lineClass} ${
-                                  isLineActive 
-                                    ? 'text-amber-900 bg-amber-50 px-2.5 py-1.5 rounded-xl border-l-2 border-l-amber-500 scale-[1.01] font-bold shadow-sm' 
-                                    : 'opacity-90'
-                                }`}
+                                className={`${lineClass} ${fontClass} ${getHighlightClass()}`}
                               >
                                 {line}
                               </p>
@@ -730,20 +962,32 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
         </div>
       </div>
 
-      {/* FULLSCREEN OVERLAY PORTAL (Simulated beautiful light-themed theater display) */}
+      {/* FULLSCREEN OVERLAY PORTAL (Simulated beautiful themed theater display) */}
       <AnimatePresence>
         {isFullScreen && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-[#fafafa] overflow-y-auto px-6 py-12 md:p-16 custom-scrollbar text-slate-800"
+            className={`fixed inset-0 z-50 overflow-y-auto px-6 py-12 md:p-16 custom-scrollbar transition-all duration-300 ${
+              readerTheme === 'dark'
+                ? 'bg-slate-950 text-slate-100'
+                : readerTheme === 'sepia'
+                  ? 'bg-[#faf4e8] text-[#3e2c14]'
+                  : 'bg-[#fafafa] text-slate-800'
+            }`}
             id="fullscreen-lyrics-overlay"
           >
             {/* Top-Right Exit Icon Only */}
             <button
               onClick={() => setIsFullScreen(false)}
-              className="fixed top-6 right-6 z-50 p-2.5 bg-white border border-slate-200 text-rose-500 hover:text-rose-600 transition hover:bg-slate-50 rounded-xl shadow-sm cursor-pointer"
+              className={`fixed top-6 right-6 z-50 p-2.5 border rounded-xl shadow-sm cursor-pointer transition ${
+                readerTheme === 'dark'
+                  ? 'bg-slate-800 border-slate-700 text-rose-400 hover:text-rose-350 hover:bg-slate-755'
+                  : readerTheme === 'sepia'
+                    ? 'bg-[#ebdca5]/85 border-[#cfc19f] text-[#8e2e2e] hover:bg-[#e2d5bd]'
+                    : 'bg-white border-slate-200 text-rose-500 hover:text-rose-600 hover:bg-slate-50'
+              }`}
               title="Remove Fullscreen"
               id="exit-fullscreen-btn"
             >
@@ -752,44 +996,156 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
 
             <div className="max-w-3xl mx-auto space-y-12 pb-32 pt-8">
               {/* Immersive Title */}
-              <div className="text-center space-y-2 border-b border-slate-100 pb-8">
-                <h1 className="text-3xl font-serif font-black tracking-tight text-slate-900">{song.title}</h1>
-                <p className="text-xs uppercase font-mono tracking-wider text-slate-400">By {song.artist}</p>
+              <div className="text-center space-y-2 border-b border-slate-100/30 pb-8">
+                <h1 className={`text-3xl font-serif font-black tracking-tight ${
+                  readerTheme === 'dark' 
+                    ? 'text-white' 
+                    : readerTheme === 'sepia'
+                      ? 'text-[#3e2c14]' 
+                      : 'text-slate-900'
+                }`}>{song.title}</h1>
+                <p className={`text-xs uppercase font-mono tracking-wider ${
+                  readerTheme === 'sepia' ? 'text-[#87745d]' : 'text-slate-400'
+                }`}>By {song.artist}</p>
               </div>
 
               {/* Readable Lyrics Blocks */}
               <div className="space-y-8 pt-4">
                 {(lyricsLanguageTab === 'english' ? song.formattedLyrics : activeFormattedLyricsHindi).map((section, sIdx) => {
                   const isChorus = section.type === 'chorus';
+                  const isTension = section.type === 'tension';
                   const isBridge = section.type === 'bridge';
                   const isHook = section.type === 'hook';
+                  const isIntro = section.type === 'intro' || section.type === 'outro';
                   const isSectionActive = activeSectionIndex === sIdx;
 
-                  let containerStyles = "p-8 rounded-2xl border transition-all duration-300 ";
-                  let headerStyles = "text-[10px] font-mono font-bold uppercase tracking-wider mb-4 block ";
-                  let lineStyles = "leading-loose tracking-wider transition-all duration-200 ";
+                  const themeStyles = {
+                    light: {
+                      chorus: {
+                        bg: isSectionActive ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-500/10 shadow-sm" : "bg-white border-emerald-100",
+                        header: "text-emerald-600",
+                        line: "italic font-bold text-slate-905",
+                        borderLeft: "border-l-emerald-500"
+                      },
+                      tension: {
+                        bg: isSectionActive ? "bg-orange-100 border-orange-300 ring-1 ring-orange-500/10 shadow-sm" : "bg-white border-orange-100",
+                        header: "text-orange-600 font-extrabold",
+                        line: "font-medium text-slate-905",
+                        borderLeft: "border-l-orange-500"
+                      },
+                      bridge: {
+                        bg: isSectionActive ? "bg-amber-50 border-amber-300 ring-1 ring-amber-500/10 shadow-sm" : "bg-white border-amber-100",
+                        header: "text-amber-700",
+                        line: "font-serif italic text-slate-905",
+                        borderLeft: "border-l-amber-550"
+                      },
+                      intro: {
+                        bg: "bg-slate-50 border-slate-100",
+                        header: "text-slate-400",
+                        line: "text-slate-500 font-mono",
+                        borderLeft: "border-l-slate-300"
+                      },
+                      standard: {
+                        bg: isSectionActive ? "bg-violet-50 border-violet-300 shadow-sm" : "bg-white border-violet-150/50",
+                        header: "text-violet-500",
+                        line: "font-sans text-slate-800",
+                        borderLeft: "border-l-violet-400"
+                      }
+                    },
+                    dark: {
+                      chorus: {
+                        bg: isSectionActive ? "bg-emerald-950/40 border-emerald-700 ring-1 ring-emerald-500/20 shadow-sm" : "bg-slate-900 border-emerald-950",
+                        header: "text-emerald-450",
+                        line: "italic font-bold text-emerald-100",
+                        borderLeft: "border-l-emerald-600"
+                      },
+                      tension: {
+                        bg: isSectionActive ? "bg-orange-950/50 border-orange-700 ring-1 ring-orange-500/25 shadow-sm" : "bg-slate-900 border-orange-950",
+                        header: "text-orange-400 font-extrabold",
+                        line: "font-medium text-orange-100",
+                        borderLeft: "border-l-orange-550"
+                      },
+                      bridge: {
+                        bg: isSectionActive ? "bg-amber-950/40 border-amber-700 ring-1 ring-amber-500/20 shadow-sm" : "bg-slate-900 border-amber-955",
+                        header: "text-amber-450",
+                        line: "font-serif italic text-amber-100",
+                        borderLeft: "border-l-amber-600"
+                      },
+                      intro: {
+                        bg: "bg-slate-900 border-slate-800",
+                        header: "text-slate-500",
+                        line: "text-slate-400 font-mono",
+                        borderLeft: "border-l-slate-600"
+                      },
+                      standard: {
+                        bg: isSectionActive ? "bg-violet-950/40 border-violet-700 shadow-sm" : "bg-slate-900 border-violet-955",
+                        header: "text-violet-400",
+                        line: "font-sans text-slate-300",
+                        borderLeft: "border-l-violet-500"
+                      }
+                    },
+                    sepia: {
+                      chorus: {
+                        bg: isSectionActive ? "bg-[#e2d5bd] border-[#c0af8b] ring-1 ring-[#a48e65]/10 shadow-sm" : "bg-[#ece0c4]/40 border-[#dfd2be]",
+                        header: "text-[#1d4122] font-bold",
+                        line: "italic font-bold text-[#332210]",
+                        borderLeft: "border-l-emerald-700"
+                      },
+                      tension: {
+                        bg: isSectionActive ? "bg-[#f5e3d3] border-[#d8b08d] ring-1 ring-[#c08d5c]/15 shadow-sm" : "bg-[#ece0c4]/40 border-[#dfd2be]",
+                        header: "text-orange-900 font-extrabold",
+                        line: "font-medium text-[#3e2305]",
+                        borderLeft: "border-l-orange-500"
+                      },
+                      bridge: {
+                        bg: isSectionActive ? "bg-[#ebdca5] border-[#c8b788] ring-1 ring-[#a89564]/10 shadow-sm" : "bg-[#ece0c4]/40 border-[#dfd2be]",
+                        header: "text-amber-950",
+                        line: "font-serif italic text-[#332210]",
+                        borderLeft: "border-l-amber-700"
+                      },
+                      intro: {
+                        bg: "bg-[#eadebe]/45 border-[#d0c19b]",
+                        header: "text-[#857053]",
+                        line: "text-[#6d5b43] font-mono",
+                        borderLeft: "border-l-[#a09070]"
+                      },
+                      standard: {
+                        bg: isSectionActive ? "bg-[#ece0c4] border-[#cfc19e] shadow-sm" : "bg-[#ece0c4]/40 border-[#dfd2be]",
+                        header: "text-violet-900",
+                        line: "font-sans text-[#403019]",
+                        borderLeft: "border-l-violet-700"
+                      }
+                    }
+                  };
 
+                  const activeTheme = themeStyles[readerTheme];
+                  let currentStyles;
                   if (isChorus) {
-                    containerStyles += isSectionActive 
-                      ? "bg-emerald-50 border-emerald-300 ring-2 ring-emerald-500/10 shadow-sm " 
-                      : "bg-white border-emerald-100/80 ";
-                    containerStyles += "border-l-8 border-l-emerald-500 pl-8";
-                    headerStyles += "text-emerald-600";
-                    lineStyles += "italic font-bold text-slate-905 ";
+                    currentStyles = activeTheme.chorus;
+                  } else if (isTension) {
+                    currentStyles = activeTheme.tension;
                   } else if (isBridge || isHook) {
-                    containerStyles += isSectionActive 
-                      ? "bg-amber-50 border-amber-300 ring-2 ring-amber-500/10 shadow-sm " 
-                      : "bg-white border-amber-100/80 ";
-                    containerStyles += "border-l-8 border-l-amber-500 pl-8";
-                    headerStyles += "text-amber-700";
-                    lineStyles += "font-serif italic text-slate-905 ";
+                    currentStyles = activeTheme.bridge;
+                  } else if (isIntro) {
+                    currentStyles = activeTheme.intro;
                   } else {
-                    containerStyles += isSectionActive 
-                      ? "bg-violet-50 border-violet-300 shadow-sm pr-8 " 
-                      : "bg-white border-violet-150/50 ";
-                    containerStyles += "border-l-8 border-l-violet-400 pl-8";
-                    headerStyles += "text-violet-500";
-                    lineStyles += "font-sans text-slate-800 ";
+                    currentStyles = activeTheme.standard;
+                  }
+
+                  let containerStyles = `p-8 rounded-2xl border transition-all duration-300 ${currentStyles.bg} border-l-8 ${currentStyles.borderLeft} pl-8 `;
+                  let headerStyles = `text-[10px] font-mono font-bold uppercase tracking-wider mb-4 block ${currentStyles.header} `;
+                  let lineStyles = `leading-loose tracking-wider transition-all duration-200 ${currentStyles.line} `;
+
+                  // Dynamic font selection for Devanagari vs Default
+                  const isHindiActive = lyricsLanguageTab === 'hindi';
+                  let fontClass = 'font-sans';
+                  if (isHindiActive) {
+                    if (hindiFont === 'poppins') fontClass = 'font-hindi-poppins';
+                    else if (hindiFont === 'rajdhani') fontClass = 'font-hindi-rajdhani';
+                    else if (hindiFont === 'yatra') fontClass = 'font-hindi-yatra';
+                    else if (hindiFont === 'rozha') fontClass = 'font-hindi-rozha';
+                    else if (hindiFont === 'arima') fontClass = 'font-hindi-arima';
+                    else if (hindiFont === 'martel') fontClass = 'font-hindi-martel';
                   }
 
                   return (
@@ -809,15 +1165,25 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
 
                           const isLineActive = activeLineIndex === globalLineIdx;
 
+                          const getFullscreenHighlightClass = () => {
+                            if (!isLineActive) return 'opacity-90';
+                            switch (readerTheme) {
+                              case 'dark':
+                                return 'text-amber-200 bg-amber-950/80 px-3 py-1.5 rounded-xl border-l-4 border-l-amber-500 scale-[1.01] font-bold shadow-md';
+                              case 'sepia':
+                                return 'text-[#543b18] bg-[#ebdca5] px-3 py-1.5 rounded-xl border-l-4 border-l-amber-700 scale-[1.01] font-bold shadow-md';
+                              case 'light':
+                              default:
+                                return 'text-amber-950 bg-amber-100 px-3 py-1.5 rounded-xl border-l-4 border-l-amber-600 scale-[1.01] font-bold shadow-sm';
+                            }
+                          };
+
                           return (
                             <p 
                               key={lIdx}
+                              id={`fullscreen-lyric-line-global-${globalLineIdx}`}
                               style={{ fontSize: `${lyricFontSize + 4}px` }} 
-                              className={`${lineStyles} ${
-                                isLineActive 
-                                  ? 'text-amber-900 bg-amber-100 px-3 py-1.5 rounded-xl border-l-4 border-l-amber-600 scale-[1.01] font-bold shadow-sm' 
-                                  : 'opacity-90'
-                              }`}
+                              className={`${lineStyles} ${fontClass} ${getFullscreenHighlightClass()}`}
                             >
                               {line}
                             </p>
