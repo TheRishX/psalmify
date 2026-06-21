@@ -1,6 +1,6 @@
 {
   "name": "Lyrics & Playlists Dashboard",
-  "description": "A lyrics and song playlist directory with a smart formatting editor and automated WordPress REST API syncing.",
+  "description": "A lyrics and song playlist directory with a smart AI-powered editor, real-time Google Cloud Firestore storage, and active Google Drive backup syncing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

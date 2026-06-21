@@ -13,9 +13,10 @@ interface SubmitSongFormProps {
   user: any;
   onClose: () => void;
   onSuccess: () => void;
+  genres?: string[];
 }
 
-export function SubmitSongForm({ user, onClose, onSuccess }: SubmitSongFormProps) {
+export function SubmitSongForm({ user, onClose, onSuccess, genres: inputGenres }: SubmitSongFormProps) {
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [album, setAlbum] = useState('');
@@ -27,7 +28,9 @@ export function SubmitSongForm({ user, onClose, onSuccess }: SubmitSongFormProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const genres = ['Contemporary', 'Hymn', 'Synthwave', 'Bluegrass', 'Lofi Pop', 'Rock', 'Acoustic'];
+  const genres = inputGenres && inputGenres.length > 0
+    ? inputGenres
+    : ['Contemporary', 'Hymn', 'Synthwave', 'Bluegrass', 'Lofi Pop', 'Rock', 'Acoustic'];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

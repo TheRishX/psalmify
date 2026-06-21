@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Song, Playlist } from './types';
+import { Song, Playlist, Genre } from './types';
 import PlaylistListView from './components/PlaylistListView';
 import SongLyricsView from './components/SongLyricsView';
 import AdminUploader from './components/AdminUploader';
@@ -18,15 +18,25 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'explore' | 'admin'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'admin'>(() => {
+    const local = localStorage.getItem('activeTab');
+    return (local === 'admin' || local === 'explore') ? local : 'explore';
+  });
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Public search filter states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState<string>('All');
-  const [activeSongId, setActiveSongId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(() => {
+    return localStorage.getItem('searchQuery') || '';
+  });
+  const [selectedGenre, setSelectedGenre] = useState<string>(() => {
+    return localStorage.getItem('selectedGenre') || 'All';
+  });
+  const [activeSongId, setActiveSongId] = useState<string | null>(() => {
+    return localStorage.getItem('activeSongId') || null;
+  });
 
   // Authentication State
   const [user, setUser] = useState<any>(null);
@@ -86,6 +96,27 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Synchronize dynamic active query parameters to disk persistence (localStorage session keeping)
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('selectedGenre', selectedGenre);
+  }, [selectedGenre]);
+
+  useEffect(() => {
+    if (activeSongId) {
+      localStorage.setItem('activeSongId', activeSongId);
+    } else {
+      localStorage.removeItem('activeSongId');
+    }
+  }, [activeSongId]);
+
+  useEffect(() => {
+    localStorage.setItem('searchQuery', searchQuery);
+  }, [searchQuery]);
+
   // Real-time snapshot synchronized listeners
   useEffect(() => {
     // Listen to songs real-time snapshot (extracting approved catalog)
@@ -113,9 +144,23 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, "playlists");
     });
 
+    // Listen to dynamic genres manager collection real-time
+    const qGenres = query(collection(db, "genres"));
+    const unsubGenres = onSnapshot(qGenres, (snapshot) => {
+      const list: Genre[] = [];
+      snapshot.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Genre);
+      });
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      setGenres(list);
+    }, (error) => {
+      console.warn("Genres Firestore onSnapshot sync exception:", error);
+    });
+
     return () => {
       unsubSongs();
       unsubPlaylists();
+      unsubGenres();
     };
   }, []);
 
@@ -161,7 +206,44 @@ export default function App() {
               handleFirestoreError(error, OperationType.CREATE, `playlists/${p.id}`);
             }
           }
+
+          // Dynamic genre collections seed
+          const defaultGenres = [
+            { id: "acoustic", name: "Acoustic", description: "Soft, organic, acoustic-driven instrumentation." },
+            { id: "contemporary", name: "Contemporary", description: "Modern worship anthems and upbeat rhythms." },
+            { id: "gospel", name: "Gospel", description: "Soulful choir praising and traditional faith anthems." },
+            { id: "traditional", name: "Traditional", description: "Classic hymns, organ instrumentation, and liturgies." },
+            { id: "rock", name: "Rock", description: "High-energy christian rock with electric guitar riffs." }
+          ];
+          for (const g of defaultGenres) {
+            try {
+              await setDoc(doc(db, "genres", g.id), {
+                ...g,
+                createdAt: new Date().toISOString()
+              });
+            } catch (err) {
+              console.warn(`Failed seeding individual genre: ${g.id}`, err);
+            }
+          }
+
           console.log("Seeding process succeeded flawlessly.");
+        } else {
+          // If the songs database is initialized but the genres metadata is missing, back-seed it automatically!
+          const qg = query(collection(db, "genres"), limit(1));
+          const snapG = await getDocs(qg);
+          if (snapG.empty) {
+            console.log("Database initialized but 'genres' collection is unregistered. Back-filling...");
+            const defaultGenres = [
+              { id: "acoustic", name: "Acoustic", description: "Soft, organic, acoustic-driven instrumentation." },
+              { id: "contemporary", name: "Contemporary", description: "Modern worship anthems and upbeat rhythms." },
+              { id: "gospel", name: "Gospel", description: "Soulful choir praising and traditional faith anthems." },
+              { id: "traditional", name: "Traditional", description: "Classic hymns, organ instrumentation, and liturgies." },
+              { id: "rock", name: "Rock", description: "High-energy christian rock with electric guitar riffs." }
+            ];
+            for (const g of defaultGenres) {
+              await setDoc(doc(db, "genres", g.id), { ...g, createdAt: new Date().toISOString() });
+            }
+          }
         }
       } catch (err) {
         console.error("Critical Firestore seed error:", err);
@@ -254,9 +336,13 @@ export default function App() {
 
   // Compute genre filter checklist dynamically
   const genresList = React.useMemo(() => {
+    if (genres && genres.length > 0) {
+      const dbGenres = genres.map(g => g.name);
+      return ['All', ...dbGenres];
+    }
     const unique = Array.from(new Set(songs.map(s => s.genre).filter(Boolean)));
     return ['All', ...unique];
-  }, [songs]);
+  }, [genres, songs]);
 
   // Handle live query filtration
   const filteredSongs = songs.filter(song => {
@@ -605,6 +691,7 @@ export default function App() {
                   onRefreshData={triggerReloadData}
                   user={user}
                   onAuthError={setAuthError}
+                  genres={genres}
                 />
               </motion.div>
             )}
@@ -668,6 +755,7 @@ export default function App() {
                     setIsSubmissionModalOpen(false);
                     alert("Track lyrics submitted for moderation successfully! Thank you for your contribution!");
                   }}
+                  genres={genres.map(g => g.name)}
                 />
               ) : (
                 <SubmitPlaylistForm

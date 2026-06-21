@@ -10,6 +10,10 @@ export interface Song {
   coverUrl?: string;
   duration?: string;
   isFeatured?: boolean;
+  status?: string;
+  createdAt?: string;
+  submittedBy?: string;
+  submittedByName?: string;
 }
 
 export interface FormattedSection {
@@ -25,6 +29,8 @@ export interface Playlist {
   coverUrl: string;
   genre: string;
   songIds: string[];
+  status?: string;
+  createdAt?: string;
 }
 
 export interface AdminCredentials {
@@ -34,4 +40,11 @@ export interface AdminCredentials {
 export interface WPToken {
   token: string;
   expiresAt: number; // timestamp in ms
+}
+
+export interface Genre {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
 }

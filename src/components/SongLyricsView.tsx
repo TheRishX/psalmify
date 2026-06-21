@@ -28,19 +28,6 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Flattened lines list for tracking active line index during simulated playback
-  const flattenedLines = React.useMemo(() => {
-    const list: { sectionIdx: number; lineIdx: number; text: string; globalIdx: number }[] = [];
-    let currentGlobalIdx = 0;
-    song.formattedLyrics.forEach((sec, sIdx) => {
-      sec.lines.forEach((line, lIdx) => {
-        list.push({ sectionIdx: sIdx, lineIdx: lIdx, text: line, globalIdx: currentGlobalIdx });
-        currentGlobalIdx++;
-      });
-    });
-    return list;
-  }, [song]);
-
   // Convert duration string "3:45" into total seconds
   const totalSeconds = React.useMemo(() => {
     if (!song.duration) return 210; // Default 3:30
@@ -72,31 +59,78 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
     };
   }, [isPlaying, totalSeconds]);
 
-  // Map simulated playback seconds to lyric lines
-  useEffect(() => {
-    if (!isPlaying) {
-      if (currentTime === 0) {
-        setActiveLineIndex(-1);
-        setActiveSectionIndex(-1);
-      }
-      return;
+  // Timetag regex parser & line-alignment mapping
+  const parsedLines = React.useMemo(() => {
+    const list: { sectionIdx: number; lineIdx: number; text: string; time: number; globalIdx: number }[] = [];
+    let currentGlobalIdx = 0;
+    
+    // Pattern looking for [mm:ss] or [mm:ss.xx]
+    const timeReg = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/;
+
+    song.formattedLyrics.forEach((sec, sIdx) => {
+      sec.lines.forEach((line, lIdx) => {
+        const match = line.match(timeReg);
+        let timeVal = -1;
+        let cleanText = line;
+
+        if (match) {
+          const m = parseInt(match[1], 10);
+          const s = parseInt(match[2], 10);
+          const ms = match[3] ? parseInt(match[3], 10) / 100 : 0;
+          timeVal = (m * 60) + s + ms;
+          cleanText = line.replace(timeReg, "").trim();
+        }
+
+        list.push({
+          sectionIdx: sIdx,
+          lineIdx: lIdx,
+          text: cleanText,
+          time: timeVal,
+          globalIdx: currentGlobalIdx
+        });
+        currentGlobalIdx++;
+      });
+    });
+
+    const hasTimestamps = list.some(item => item.time !== -1);
+    if (hasTimestamps) {
+      // Sort in timeline sequence
+      list.sort((a, b) => a.time - b.time);
+    } else {
+      // Proportional distribution over duration fallback
+      const lineDuration = totalSeconds / Math.max(1, list.length);
+      list.forEach((item, idx) => {
+        item.time = idx * lineDuration;
+      });
     }
 
-    // Distribute lyric lines evenly across the duration
-    if (flattenedLines.length > 0) {
-      const lineDuration = totalSeconds / flattenedLines.length;
-      const currentLineIdx = Math.floor(currentTime / lineDuration);
-      
-      if (currentLineIdx < flattenedLines.length) {
-        setActiveLineIndex(currentLineIdx);
-        const mappedLine = flattenedLines[currentLineIdx];
+    return list;
+  }, [song, totalSeconds]);
+
+  // Map simulated playback seconds to lyric lines
+  useEffect(() => {
+    if (parsedLines.length > 0) {
+      let activeIdx = -1;
+      for (let i = 0; i < parsedLines.length; i++) {
+        if (currentTime >= parsedLines[i].time) {
+          activeIdx = i;
+        } else {
+          break;
+        }
+      }
+
+      if (activeIdx !== -1) {
+        setActiveLineIndex(activeIdx);
+        const mappedLine = parsedLines[activeIdx];
         setActiveSectionIndex(mappedLine.sectionIdx);
       } else {
-        setActiveLineIndex(-1);
-        setActiveSectionIndex(-1);
+        if (currentTime === 0) {
+          setActiveLineIndex(-1);
+          setActiveSectionIndex(-1);
+        }
       }
     }
-  }, [currentTime, isPlaying, flattenedLines, totalSeconds]);
+  }, [currentTime, parsedLines]);
 
   // Handle smooth scroll assist when lyrics sequence moves forward
   useEffect(() => {
@@ -522,6 +556,29 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
           </button>
         )}
 
+        {/* Dynamic Connected YouTube player */}
+        {song.youtubeUrl && getYouTubeId(song.youtubeUrl) && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3 relative overflow-hidden">
+            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-500 uppercase flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              YouTube Live Sync Video
+            </h3>
+            <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-900 border border-slate-100 shadow-sm">
+              <iframe
+                id="yt-sync-iframe"
+                src={`https://www.youtube.com/embed/${getYouTubeId(song.youtubeUrl)}?enablejsapi=1&autoplay=0&rel=0`}
+                title="YouTube music video player"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full border-0"
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono leading-relaxed">
+              💡 Play the music of YouTube. Moving the lyrics slider above syncs lyrics based on timestamps!
+            </p>
+          </div>
+        )}
+
         {/* Minimal Information Insight panel */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 relative overflow-hidden shadow-sm">
           <div className="absolute top-3 right-3 p-1 rounded bg-rose-50 border border-rose-100 text-rose-600">
@@ -667,3 +724,11 @@ export default function SongLyricsView({ song, onBackToSearch }: SongLyricsViewP
     </div>
   );
 }
+
+function getYouTubeId(url?: string) {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+}
+

@@ -37,6 +37,18 @@
         "createdAt": { "type": "string" }
       },
       "required": ["name", "description", "status", "submittedBy", "createdAt"]
+    },
+    "Genre": {
+      "title": "Genre",
+      "description": "A dynamic musical catalog genre.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
     }
   },
   "firestore": {
@@ -47,6 +59,10 @@
     "/playlists/{playlistId}": {
       "schema": "Playlist",
       "description": "Collection of curated themed song lists."
+    },
+    "/genres/{genreId}": {
+      "schema": "Genre",
+      "description": "Dynamic playlist & submission genres."
     }
   }
 }

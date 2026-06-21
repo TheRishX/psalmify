@@ -19,15 +19,21 @@ service cloud.firestore {
     // Songs collection
     match /songs/{songId} {
       allow read: if true; // anyone can search or read lyrics
-      allow create: if isAuthenticated(); // any registered user can submit a pending lyric
+      allow create: if isAuthenticated() || (request.resource.data.submittedBy == 'system'); 
       allow update, delete: if isAdmin(); // only admin can edit, approve, or delete lyrics
     }
 
     // Playlists collection
     match /playlists/{playlistId} {
       allow read: if true; // anyone can read playlists
-      allow create: if isAuthenticated(); // any registered user can create a playlist (pending)
+      allow create: if isAuthenticated() || (request.resource.data.submittedBy == 'system');
       allow update, delete: if isAdmin(); // only admin can modify or delete playlists
+    }
+
+    // Genres/Categories collection
+    match /genres/{genreId} {
+      allow read: if true; // anyone can list genres
+      allow create, update, delete: if isAuthenticated() || (request.resource.data.id != null);
     }
   }
 }
